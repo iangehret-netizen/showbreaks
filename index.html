@@ -1,0 +1,1225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weigh-Break Recorder</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%23000%27/%3E%3Crect x=%274%27 y=%2726%27 width=%2724%27 height=%273%27 fill=%27%23b8913a%27/%3E%3Ctext x=%2716%27 y=%2721%27 font-size=%2716%27 font-family=%27Arial%27 font-weight=%27bold%27 text-anchor=%27middle%27 fill=%27%23fff%27%3EW%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+
+<style>
+/* Scale-ticket ledger: condensed stamped headers over a wide tabular grid,
+   weigh breaks set in mono so every column of digits lines up like a printout. */
+:root{
+  --bg:#000000; --surface:#c9c9c9; --surface-2:#1c1c1c;
+  --ink:#141414; --ink-soft:#4a4a4a; --line:#3a3a3a;
+  --accent:#ffffff; --accent-ink:#0a0a0a;
+  --gold:#000000; --gold-soft:#1c1c1c;
+  --good:#2e2e2e;
+  --on-dark:#f2f2f2; --on-dark-soft:#b5b5b5;
+  --gold-ink:#d6b25e; --gold-fill:#b8913a; --gold-tint:#d8c99f;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#000000; --surface:#c9c9c9; --surface-2:#1c1c1c;
+    --ink:#141414; --ink-soft:#4a4a4a; --line:#3a3a3a;
+    --accent:#ffffff; --accent-ink:#0a0a0a;
+    --gold:#000000; --gold-soft:#1c1c1c;
+    --good:#2e2e2e;
+    --on-dark:#f2f2f2; --on-dark-soft:#b5b5b5;
+  --gold-ink:#d6b25e; --gold-fill:#b8913a; --gold-tint:#d8c99f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#000000; --surface:#c9c9c9; --surface-2:#1c1c1c;
+  --ink:#141414; --ink-soft:#4a4a4a; --line:#3a3a3a;
+  --accent:#ffffff; --accent-ink:#0a0a0a;
+  --gold:#000000; --gold-soft:#1c1c1c;
+  --good:#2e2e2e;
+  --on-dark:#f2f2f2; --on-dark-soft:#b5b5b5;
+  --gold-ink:#d6b25e; --gold-fill:#b8913a; --gold-tint:#d8c99f;
+  color-scheme: dark;
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg); color:var(--on-dark); margin:0; font-family:'Work Sans',system-ui,sans-serif;}
+h1,h2,h3,.display{font-family:'Oswald',system-ui,sans-serif; text-transform:uppercase; letter-spacing:.03em;}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace; font-variant-numeric: tabular-nums;}
+
+.wrap{max-width:1180px; margin:0 auto; padding:20px 16px 48px;}
+
+/* header */
+.topbar{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px;}
+.topbar h1{font-size:clamp(1.5rem,4vw,2.1rem); margin:0 0 4px; font-weight:600; color:var(--accent);}
+.topbar p{margin:0; color:var(--on-dark-soft); font-size:.92rem; max-width:52ch;}
+
+.seriesrow{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;}
+
+.tabs{display:flex; gap:6px; flex-wrap:wrap;}
+.tab{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.04em; font-size:.82rem;
+  padding:9px 16px; border-radius:999px; border:1px solid var(--line); background:var(--surface);
+  color:var(--ink-soft); cursor:pointer;}
+.tab[aria-selected="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+
+.toolbar{display:flex; justify-content:space-between; align-items:center; gap:12px; margin:16px 0 10px; flex-wrap:wrap;}
+.hint{font-size:.82rem; color:var(--on-dark-soft);}
+.toolbar-actions{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+.exportgroup{display:flex; gap:8px; flex-wrap:wrap;}
+
+button{font:inherit; cursor:pointer;}
+.btn{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.03em; font-size:.85rem;
+  padding:10px 18px; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:var(--accent-ink);}
+.btn:hover{filter:brightness(1.06)}
+.btn.ghost{background:transparent; color:var(--accent); }
+.btn.subtle{background:var(--surface-2); color:var(--on-dark); border-color:var(--line);}
+.btn.danger{background:transparent; color:#b33; border-color:#b33;}
+.btn:disabled{opacity:.5; cursor:not-allowed;}
+.iconbtn{background:transparent; border:1px solid var(--line); color:var(--ink-soft); border-radius:6px; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; font-size:.8rem;}
+.iconbtn:hover{color:var(--ink); border-color:var(--ink-soft);}
+
+/* table */
+.tablecard{background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:12px; overflow:hidden;}
+.tablescroll{overflow-x:auto;}
+table{border-collapse:separate; border-spacing:0; width:100%; min-width:560px;}
+thead th{position:sticky; top:0; background:var(--surface); z-index:3; padding:10px 8px; border-bottom:1px solid var(--line); vertical-align:bottom;}
+th.rowlabelhead{position:sticky; left:0; z-index:4; text-align:left; background:var(--surface); min-width:150px; max-width:170px;}
+td.rowlabel{position:sticky; left:0; background:var(--surface); z-index:1; font-size:.84rem; padding:7px 10px; border-bottom:1px solid var(--line); white-space:nowrap;}
+th.showhead{min-width:112px; max-width:130px; text-align:center;}
+th.avghead{position:sticky; right:0; z-index:4; background:var(--gold-soft); color:var(--on-dark); min-width:118px; text-align:center;}
+td.avgcell{position:sticky; right:0; background:var(--gold-soft); color:var(--on-dark); z-index:1; text-align:center; border-bottom:1px solid var(--line); border-left:1px solid var(--line);}
+td.datacell{text-align:center; padding:6px 6px; border-bottom:1px solid var(--line); font-size:.86rem;}
+.showname{font-family:'Oswald',sans-serif; font-size:.82rem; letter-spacing:.02em;}
+.showjudge{font-size:.7rem; color:var(--ink-soft); font-weight:500; text-transform:none; letter-spacing:0; margin-top:2px; font-family:'Work Sans',sans-serif;}
+.showjudge.muted{opacity:.6; font-style:italic;}
+.showdatesub{display:block; font-size:.62rem; color:var(--ink-soft); font-weight:400; text-transform:none; letter-spacing:0; margin-top:1px; opacity:.8; font-family:'Work Sans',sans-serif;}
+.showhead-inner{display:flex; flex-direction:column; align-items:center; gap:2px;}
+.showhead-inner button{display:flex; flex-direction:column; align-items:center; gap:2px; text-align:center; cursor:pointer; font:inherit;}
+table{color:inherit; font-size:inherit;}
+
+tr.breedrow td{background:var(--surface-2); font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.04em; font-size:.74rem; color:var(--on-dark-soft); padding:6px 10px; border-bottom:1px solid var(--line); position:static;}
+.range{font-weight:600;}
+.note{display:block; font-size:.66rem; color:var(--ink-soft); font-family:'Work Sans',sans-serif; text-transform:uppercase; letter-spacing:.03em;}
+.empty-dash{color:var(--line); font-size:1rem;}
+.avg-n{display:block; font-size:.64rem; color:var(--on-dark-soft); font-family:'Work Sans',sans-serif; margin-top:2px;}
+
+.emptystate{padding:40px 24px; text-align:center; color:var(--ink-soft);}
+.emptystate .display{color:var(--ink); font-size:1.1rem; margin-bottom:6px;}
+
+/* modal */
+.scrim{position:fixed; inset:0; background:rgba(10,10,8,.5); display:flex; align-items:flex-start; justify-content:center; padding:24px 14px; overflow-y:auto; z-index:50;}
+.modal{background:var(--surface); color:var(--ink); border-radius:14px; width:100%; max-width:640px; margin:0 auto; border:1px solid var(--line); display:flex; flex-direction:column; max-height:calc(100vh - 48px);}
+.modal-head{display:flex; align-items:center; justify-content:space-between; padding:18px 20px 12px; border-bottom:1px solid var(--line);}
+.modal-head h2{margin:0; font-size:1.2rem; font-weight:600;}
+.modal-body{padding:16px 20px; overflow-y:auto;}
+.modal-foot{display:flex; justify-content:space-between; gap:10px; padding:14px 20px; border-top:1px solid var(--line); flex-wrap:wrap;}
+.field{margin-bottom:12px;}
+.field label{display:block; font-size:.76rem; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin-bottom:4px; font-family:'Oswald',sans-serif;}
+.field input{width:100%; padding:9px 10px; border-radius:7px; border:1px solid var(--line); background:var(--surface-2); color:var(--on-dark); font:inherit;}
+.field input:focus{outline:2px solid var(--accent); outline-offset:1px;}
+.fieldrow{display:flex; gap:10px;}
+.fieldrow .field{flex:1;}
+
+details.breedgroup{border:1px solid var(--line); border-radius:8px; margin-bottom:8px; overflow:hidden;}
+details.breedgroup summary{cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:space-between; padding:9px 12px; background:var(--surface-2); color:var(--on-dark); font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.03em; font-size:.82rem;}
+details.breedgroup summary::-webkit-details-marker{display:none}
+details.breedgroup summary .chev{transition:transform .15s;}
+details.breedgroup[open] summary .chev{transform:rotate(90deg);}
+.classrow{display:grid; grid-template-columns:1fr 70px 70px 72px; gap:8px; align-items:center; padding:7px 12px; border-top:1px solid var(--line);}
+.classrow label.clabel{font-size:.82rem; margin:0;}
+.classrow input{width:100%; padding:6px 7px; border-radius:6px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font:inherit; font-size:.82rem;}
+.classrow input.mono{text-align:center;}
+.colheads{display:grid; grid-template-columns:1fr 70px 70px 72px; gap:8px; padding:4px 12px; font-size:.64rem; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft);}
+
+.toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--surface); color:var(--ink); padding:9px 16px; border-radius:999px; font-size:.84rem; z-index:60; opacity:0; pointer-events:none; transition:opacity .2s; box-shadow:0 4px 18px rgba(0,0,0,.4);}
+.toast.show{opacity:1;}
+
+/* gold accents, matching the GSC apps: eyebrow label, gold rules, gold primary buttons,
+   gold hover/focus rings, soft-gold row hover, gold average figures */
+.eyebrow{font:600 11px/1 'Work Sans',system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--gold-ink); margin-bottom:8px;}
+.topbar{padding-bottom:14px; border-bottom:2px solid var(--gold-fill);}
+.btn:not(.ghost):not(.subtle):not(.danger){background:var(--gold-fill); border-color:var(--gold-fill); color:#1f1d18;}
+.btn,.tab{transition:border-color .12s, transform .08s, background .12s;}
+.btn:active,.tab:active{transform:scale(.985);}
+.btn.ghost:hover,.btn.subtle:hover,.tab:hover,.iconbtn:hover{border-color:var(--gold-ink);}
+.btn:focus-visible,.tab:focus-visible,.iconbtn:focus-visible,details.breedgroup summary:focus-visible{outline:3px solid var(--gold-ink); outline-offset:2px;}
+#seriesTabs .tab[aria-selected="true"]{background:var(--gold-fill); border-color:var(--gold-fill); color:#1f1d18;}
+#tabs .tab[aria-selected="true"]{box-shadow:0 2px 0 var(--gold-fill);}
+.tablecard{border-top:3px solid var(--gold-fill);}
+th.avghead{border-bottom:2px solid var(--gold-fill);}
+tr:hover td.datacell, tr:hover td.rowlabel{background:var(--gold-tint);}
+.field input:focus,.classrow input:focus{outline:2px solid var(--gold-ink); outline-offset:1px; border-color:var(--gold-ink);}
+.modal-head{border-bottom:2px solid var(--gold-fill);}
+details.breedgroup summary .chev{color:var(--gold-ink);}
+.toast{border:1px solid var(--gold-fill);}
+/* resizable columns */
+.colgrip{position:absolute; top:0; bottom:0; right:0; width:10px; cursor:col-resize; z-index:6; touch-action:none; user-select:none;}
+.colgrip.left{right:auto; left:0;}
+.colgrip::after{content:""; position:absolute; top:22%; bottom:22%; left:4px; width:2px; border-radius:1px; background:var(--ink-soft); opacity:.35; transition:opacity .12s, background .12s;}
+th.avghead .colgrip::after{background:var(--on-dark-soft);}
+.colgrip:hover::after,.colgrip.active::after{background:var(--gold-fill); opacity:1;}
+body.resizing{cursor:col-resize; user-select:none;}
+table.custom{table-layout:fixed;}
+table.custom th,table.custom td{min-width:0!important; max-width:none!important; overflow:hidden;}
+table.custom td.rowlabel{text-overflow:ellipsis;}
+.tab.addtab{background:transparent; border-style:dashed; border-color:var(--gold-fill); color:var(--gold-ink);}
+.tab.addtab:hover{background:var(--gold-fill); color:#1f1d18;}
+.field .checklist label{display:flex; align-items:center; gap:9px; text-transform:none; font-family:'Work Sans',sans-serif; font-size:.9rem; letter-spacing:0; color:var(--ink); margin:0; padding:6px 0; cursor:pointer;}
+.checklist input{accent-color:var(--gold-fill); width:17px; height:17px; flex:none;}
+.checklist .muted{color:var(--ink-soft); font-size:.78rem;}
+.fieldnote{font-size:.78rem; color:var(--ink-soft); margin:8px 0 0;}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+[hidden]{display:none!important;}
+
+@media (max-width:600px){
+  .classrow{grid-template-columns:1fr 56px 56px 60px; gap:5px;}
+  .colheads{grid-template-columns:1fr 56px 56px 60px; gap:5px;}
+}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
+
+<div class="wrap">
+  <div class="seriesrow" role="tablist" id="seriesTabs">
+    <button class="tab" role="tab" data-series="naile" aria-selected="true">NAILE</button>
+    <button class="tab" role="tab" data-series="osf" aria-selected="false">Ohio State Fair</button>
+  </div>
+  <div class="topbar">
+    <div>
+      <div class="eyebrow">Gehret Sheep Co &middot; Weigh Breaks</div>
+      <h1>Weigh-Break Recorder</h1>
+      <p>Log each show's weigh breaks by class, then watch the average range build across every show you've recorded.</p>
+    </div>
+    <div class="tabs" role="tablist" id="tabs">
+      <button class="tab" role="tab" data-template="purebred" aria-selected="true">Purebred / Market Wethers</button>
+      <button class="tab" role="tab" data-template="commercial" aria-selected="false">Commercial Ewes</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <span class="hint" id="statusHint">Loading shows&hellip;</span>
+    <div class="toolbar-actions">
+      <button class="btn ghost" id="resetWidthsBtn" hidden title="Put every column back to its default width">Reset widths</button>
+      <button class="btn ghost" id="editSeriesBtn" hidden title="Rename this tab, change its class layouts, or delete it">Edit Tab</button>
+      <span class="exportgroup" id="exportGroup" hidden>
+        <button class="btn ghost" id="exportXlsxBtn" title="Workbook with one sheet per tab in this show series">Export Excel</button>
+        <button class="btn ghost" id="exportPdfBtn" title="Landscape PDF of the tab you are viewing">Save PDF</button>
+      </span>
+      <button class="btn" id="addShowBtn">+ Add Show</button>
+    </div>
+  </div>
+
+  <div class="tablecard">
+    <div class="tablescroll">
+      <table id="mainTable" aria-live="polite">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="emptystate" id="emptyState" hidden>
+      <div class="display">No shows logged yet</div>
+      <div>Add your first show to start building the weigh-break history for this template.</div>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <h2 id="modalTitle">Add Show</h2>
+      <button class="iconbtn" id="closeModal" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fieldrow">
+        <div class="field">
+          <label for="showName">Show name</label>
+          <input id="showName" type="text" placeholder="e.g. NAILE 2026" maxlength="80">
+        </div>
+        <div class="field">
+          <label for="showDate">Date</label>
+          <input id="showDate" type="date">
+        </div>
+      </div>
+      <div class="field">
+        <label for="showJudge">Judge (optional)</label>
+        <input id="showJudge" type="text" placeholder="e.g. Ross Stultz (TX)" maxlength="60">
+      </div>
+      <div class="field" style="margin-top:4px;">
+        <label style="margin-bottom:8px;">Class weigh breaks &mdash; leave blank for any class not held</label>
+        <div id="classGroups"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger" id="deleteShowBtn" hidden>Delete Show</button>
+      <div style="display:flex; gap:10px; margin-left:auto;">
+        <button class="btn subtle" id="cancelModal">Cancel</button>
+        <button class="btn" id="saveShowBtn">Save Show</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="seriesScrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="seriesTitle" style="max-width:480px;">
+    <div class="modal-head">
+      <h2 id="seriesTitle">Add Tab</h2>
+      <button class="iconbtn" id="closeSeries" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="seriesName">Tab name</label>
+        <input id="seriesName" type="text" maxlength="40" placeholder="e.g. Ohio County Fair">
+      </div>
+      <div class="field">
+        <label>Class layouts for this tab</label>
+        <div class="checklist" id="layoutChecks"></div>
+        <p class="fieldnote">Pick the class lists this show uses. Each one becomes its own sub-tab where you add shows by year.</p>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger" id="deleteSeriesBtn" hidden>Delete Tab</button>
+      <div style="display:flex; gap:10px; margin-left:auto;">
+        <button class="btn subtle" id="cancelSeries">Cancel</button>
+        <button class="btn" id="saveSeriesBtn">Save Tab</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="seed.js"></script>
+<script src="storage.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---------- template config ----------
+  function breedRows(breed, prefix, count, startAt){
+    startAt = startAt || 1;
+    var out = [];
+    for (var i=0;i<count;i++){
+      var n = startAt+i;
+      out.push({k: prefix+n, l: breed+' '+n, b: breed});
+    }
+    return out;
+  }
+
+  var PUREBRED_ROWS = []
+    .concat([{k:'aob', l:'AOB', b:'AOB'}])
+    .concat([{k:'dorper', l:'Dorper', b:'Dorper'}])
+    .concat([{k:'dorset1', l:'Dorset 1', b:'Dorset'}, {k:'dorset2', l:'Dorset 2', b:'Dorset'}])
+    .concat(breedRows('Hampshire','hamp',9))
+    .concat(breedRows('Natural Colored','natural',5))
+    .concat(breedRows('Oxford','oxford',2))
+    .concat(breedRows('Shropshire','shrop',3))
+    .concat(breedRows('Southdown','southdown',2))
+    .concat(breedRows('Suffolk','suffolk',2))
+    .concat(breedRows('Black Face Cross','bfx',15))
+    .concat(breedRows('White Face Cross','wfx',3));
+
+  var COMMERCIAL_ROWS = []
+    .concat(breedRows('BFX','bfx',15,4))
+    .concat(breedRows('WFX','wfx',3));
+
+  // Ohio State Fair row sets (from OSF_Breaks.xlsx: Jackpot/Ewe Classes, Jr Classes, Open Market)
+  var OSF_EWE_ROWS = [
+    {k:'wfx1', l:'White Face Cross', b:'White Face Cross'}
+  ].concat(breedRows('Black Face Cross','bfx',12));
+
+  var OSF_JR_ROWS = []
+    .concat(breedRows('Hampshire','hamp',5))
+    .concat([{k:'shrop1', l:'Shropshire', b:'Shropshire'}])
+    .concat([{k:'southdown1', l:'Southdown', b:'Southdown'}])
+    .concat([{k:'dorset1', l:'Dorset', b:'Dorset'}])
+    .concat(breedRows('Oxford','oxford',2))
+    .concat([{k:'aob1', l:'AOB', b:'AOB'}])
+    .concat(breedRows('White Face Cross','wfx',2))
+    .concat(breedRows('Natural Colored','natural',4))
+    .concat(breedRows('Black Face Cross','bfx',11));
+
+  var OSF_OPEN_ROWS = []
+    .concat(breedRows('Hampshire','hamp',5))
+    .concat([{k:'shrop1', l:'Shropshire', b:'Shropshire'}])
+    .concat([{k:'southdown1', l:'Southdown', b:'Southdown'}])
+    .concat([{k:'dorset1', l:'Polled Dorset', b:'Dorset'}])
+    .concat(breedRows('Oxford','oxford',2))
+    .concat([{k:'aob1', l:'AOB', b:'AOB'}])
+    .concat([{k:'wfx1', l:'White Face Cross', b:'White Face Cross'}])
+    .concat(breedRows('Natural Colored','natural',4))
+    .concat(breedRows('Black Face Cross','bfx',10));
+
+  var TEMPLATES = {
+    purebred: { label: 'Purebred / Market Wethers', rows: PUREBRED_ROWS },
+    commercial: { label: 'Commercial Ewes', rows: COMMERCIAL_ROWS },
+    osfewe: { label: 'Ewe / Jackpot Classes', rows: OSF_EWE_ROWS },
+    osfjrmarket: { label: 'Jr Market', rows: OSF_JR_ROWS },
+    osfopenmarket: { label: 'Open Market', rows: OSF_OPEN_ROWS }
+  };
+
+  var BUILTIN_SERIES = {
+    naile: { label: 'NAILE', templates: ['purebred','commercial'], builtin: true },
+    osf: { label: 'Ohio State Fair', templates: ['osfewe','osfjrmarket','osfopenmarket'], builtin: true }
+  };
+  var SERIES = {}, SERIES_ORDER = [];
+  var customSeries = [];   // [{id, name, templates, created}] from the db
+
+  function rebuildSeries(){
+    SERIES = {}; SERIES_ORDER = [];
+    ['naile','osf'].forEach(function(k){ SERIES[k] = BUILTIN_SERIES[k]; SERIES_ORDER.push(k); });
+    customSeries.forEach(function(c){
+      if (SERIES[c.id]) return;
+      SERIES[c.id] = { label: c.name, templates: c.templates, builtin: false, created: c.created };
+      SERIES_ORDER.push(c.id);
+    });
+  }
+  rebuildSeries();
+
+  var BREED_COLORS = {
+    'AOB': '#8a8575', 'Dorper': '#4472c4', 'Dorset': '#5a8f5a',
+    'Hampshire': '#8a6fb0', 'Natural Colored': '#4f9a98', 'Oxford': '#b5574a',
+    'Shropshire': '#c98a46', 'Southdown': '#7fae6a', 'Suffolk': '#4a5a8a',
+    'Black Face Cross': '#b99a2e', 'White Face Cross': '#a9792a'
+  };
+
+  function groupByBreed(rows){
+    var groups = [], map = {};
+    rows.forEach(function(r){
+      if (!map[r.b]){ map[r.b] = {breed:r.b, rows:[]}; groups.push(map[r.b]); }
+      map[r.b].rows.push(r);
+    });
+    return groups;
+  }
+
+  // ---------- state ----------
+  var ALL_TEMPLATE_KEYS = Object.keys(TEMPLATES);
+  var state = {
+    series: 'naile',
+    template: 'purebred',
+    shows: {},
+    loaded: {},
+    editingId: null
+  };
+  ALL_TEMPLATE_KEYS.forEach(function(k){ state.shows[k] = []; state.loaded[k] = false; });
+
+  var db = null, dbAvailable = false;
+
+  function fmtDate(iso){
+    if (!iso) return '';
+    var d = new Date(iso + 'T00:00:00');
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
+  }
+
+  function showYearLabel(s){
+    if (s.date){
+      var m = /^(\d{4})-/.exec(s.date);
+      if (m) return m[1];
+    }
+    if (s.name){
+      var m2 = /(\d{4})/.exec(s.name);
+      if (m2) return m2[1];
+    }
+    return s.name || 'Show';
+  }
+
+  function showToast(msg){
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(function(){ t.classList.remove('show'); }, 2200);
+  }
+
+  // ---------- column widths (drag the edge of a header to resize) ----------
+  var WIDTH_KEY = 'wbr-colwidths-v1';
+  var DEFAULT_W = { class: 160, show: 120, avg: 124 };
+  var MIN_W = 56, MAX_W = 600;
+  var allWidths = {};
+  try { allWidths = JSON.parse(localStorage.getItem(WIDTH_KEY) || '{}') || {}; } catch (e){ allWidths = {}; }
+
+  function widthKey(){ return state.series + '|' + state.template; }
+  function curWidths(){ return allWidths[widthKey()]; }
+  function persistWidths(){ try { localStorage.setItem(WIDTH_KEY, JSON.stringify(allWidths)); } catch (e){} }
+  function hasCustomWidths(){ var w = curWidths(); return !!(w && Object.keys(w).length); }
+
+  function applyColWidths(){
+    var table = document.getElementById('mainTable');
+    var old = table.querySelector('colgroup');
+    if (old) old.remove();
+    var resetBtn = document.getElementById('resetWidthsBtn');
+    if (!hasCustomWidths()){
+      table.classList.remove('custom');
+      table.style.width = ''; table.style.minWidth = '';
+      if (resetBtn) resetBtn.hidden = true;
+      return;
+    }
+    var w = curWidths(), total = 0;
+    var cg = document.createElement('colgroup');
+    table.querySelectorAll('thead th').forEach(function(th){
+      var id = th.dataset.col;
+      var px = w[id] || (id === 'class' ? DEFAULT_W.class : id === 'avg' ? DEFAULT_W.avg : DEFAULT_W.show);
+      var col = document.createElement('col');
+      col.style.width = px + 'px';
+      cg.appendChild(col);
+      total += px;
+    });
+    table.insertBefore(cg, table.firstChild);
+    table.classList.add('custom');
+    table.style.width = total + 'px';
+    table.style.minWidth = total + 'px';
+    if (resetBtn) resetBtn.hidden = false;
+  }
+
+  function addGrip(th, dir){
+    var grip = document.createElement('span');
+    grip.className = 'colgrip' + (dir < 0 ? ' left' : '');
+    grip.title = 'Drag to resize. Double-click to reset this column.';
+    grip.addEventListener('pointerdown', function(e){
+      e.preventDefault(); e.stopPropagation();
+      var key = widthKey();
+      if (!allWidths[key]) allWidths[key] = {};
+      var w = allWidths[key];
+      // freeze every column at its current width so only the dragged one moves
+      th.parentNode.querySelectorAll('th').forEach(function(t){
+        if (!w[t.dataset.col]) w[t.dataset.col] = Math.round(t.getBoundingClientRect().width);
+      });
+      var id = th.dataset.col, startX = e.clientX, startW = w[id];
+      try { grip.setPointerCapture(e.pointerId); } catch (err){}
+      grip.classList.add('active');
+      document.body.classList.add('resizing');
+      function move(ev){
+        w[id] = Math.max(MIN_W, Math.min(MAX_W, Math.round(startW + dir * (ev.clientX - startX))));
+        applyColWidths();
+      }
+      function up(){
+        grip.removeEventListener('pointermove', move);
+        grip.removeEventListener('pointerup', up);
+        grip.removeEventListener('pointercancel', up);
+        grip.classList.remove('active');
+        document.body.classList.remove('resizing');
+        persistWidths();
+      }
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', up);
+      grip.addEventListener('pointercancel', up);
+      applyColWidths();
+    });
+    grip.addEventListener('dblclick', function(e){
+      e.stopPropagation();
+      var w = curWidths();
+      if (!w) return;
+      delete w[th.dataset.col];
+      if (!Object.keys(w).length) delete allWidths[widthKey()];
+      persistWidths();
+      applyColWidths();
+    });
+    grip.addEventListener('click', function(e){ e.stopPropagation(); });
+    th.appendChild(grip);
+  }
+
+  // ---------- rendering: main table ----------
+  function renderTable(){
+    var tpl = TEMPLATES[state.template];
+    var shows = (state.shows[state.template] || []).filter(function(s){ return s.series === state.series; }).sort(function(a,b){
+      return (a.date||'').localeCompare(b.date||'');
+    });
+    var thead = document.getElementById('tableHead');
+    var tbody = document.getElementById('tableBody');
+    var emptyState = document.getElementById('emptyState');
+    var table = document.getElementById('mainTable');
+    var statusHint = document.getElementById('statusHint');
+
+    if (!state.loaded[state.template]){
+      statusHint.textContent = 'Loading shows…';
+    } else {
+      statusHint.textContent = shows.length
+        ? shows.length + ' show' + (shows.length===1?'':'s') + ' logged for ' + tpl.label
+        : 'No shows logged for ' + tpl.label + ' yet';
+    }
+
+    if (state.loaded[state.template] && shows.length === 0){
+      table.hidden = true;
+      emptyState.hidden = false;
+    } else {
+      table.hidden = false;
+      emptyState.hidden = true;
+    }
+
+    // head
+    var headRow = document.createElement('tr');
+    var th0 = document.createElement('th');
+    th0.className = 'rowlabelhead';
+    th0.textContent = 'Class';
+    th0.dataset.col = 'class';
+    addGrip(th0, 1);
+    headRow.appendChild(th0);
+
+    shows.forEach(function(s){
+      var th = document.createElement('th');
+      th.className = 'showhead';
+      th.dataset.col = s.id;
+      var inner = document.createElement('div');
+      inner.className = 'showhead-inner';
+      var nameBtn = document.createElement('button');
+      nameBtn.className = 'iconbtn';
+      nameBtn.style.cssText = 'width:auto;height:auto;border:none;background:none;padding:0;color:inherit;';
+      nameBtn.innerHTML = '<span class="showname">'+escapeHtml(showYearLabel(s))+'</span>' +
+        (s.judge
+          ? '<span class="showjudge">'+escapeHtml(s.judge)+'</span>'
+          : '<span class="showjudge muted">No judge listed</span>') +
+        '<span class="showdatesub">'+fmtDate(s.date)+'</span>';
+      nameBtn.title = 'Edit this show';
+      nameBtn.addEventListener('click', function(){ openModal(s); });
+      inner.appendChild(nameBtn);
+      th.appendChild(inner);
+      addGrip(th, 1);
+      headRow.appendChild(th);
+    });
+
+    var thAvg = document.createElement('th');
+    thAvg.className = 'avghead';
+    thAvg.innerHTML = '<span class="showname" style="color:var(--gold-ink)">Average</span>';
+    thAvg.dataset.col = 'avg';
+    addGrip(thAvg, -1);
+    headRow.appendChild(thAvg);
+
+    thead.innerHTML = '';
+    thead.appendChild(headRow);
+    applyColWidths();
+
+    // body
+    tbody.innerHTML = '';
+    if (!state.loaded[state.template]){
+      groupByBreed(tpl.rows).forEach(function(g){
+        appendBreedRow(tbody, g.breed, shows.length);
+        g.rows.forEach(function(r){
+          var tr = document.createElement('tr');
+          var tdl = document.createElement('td');
+          tdl.className = 'rowlabel';
+          tdl.textContent = r.l;
+          tr.appendChild(tdl);
+          for (var i=0;i<shows.length;i++){
+            var td = document.createElement('td');
+            td.className = 'datacell';
+            td.innerHTML = '<span class="empty-dash">&middot;&middot;&middot;</span>';
+            tr.appendChild(td);
+          }
+          var tdAvg = document.createElement('td');
+          tdAvg.className = 'avgcell';
+          tdAvg.innerHTML = '<span class="empty-dash">&middot;&middot;&middot;</span>';
+          tr.appendChild(tdAvg);
+          tbody.appendChild(tr);
+        });
+      });
+      return;
+    }
+
+    groupByBreed(tpl.rows).forEach(function(g){
+      appendBreedRow(tbody, g.breed, shows.length);
+      g.rows.forEach(function(r){
+        var tr = document.createElement('tr');
+        var tdl = document.createElement('td');
+        tdl.className = 'rowlabel';
+        tdl.style.borderLeft = '3px solid ' + (BREED_COLORS[r.b] || 'var(--line)');
+        tdl.textContent = r.l;
+        tr.appendChild(tdl);
+
+        var mins = [], maxs = [];
+        shows.forEach(function(s){
+          var e = s.entries && s.entries[r.k];
+          var td = document.createElement('td');
+          td.className = 'datacell';
+          if (e && typeof e.min === 'number' && typeof e.max === 'number'){
+            mins.push(e.min); maxs.push(e.max);
+            td.innerHTML = '<span class="range mono">'+e.min+'&ndash;'+e.max+'</span>' +
+              (e.note ? '<span class="note">'+escapeHtml(e.note)+'</span>' : '');
+          } else {
+            td.innerHTML = '<span class="empty-dash">&mdash;</span>';
+          }
+          tr.appendChild(td);
+        });
+
+        var tdAvg = document.createElement('td');
+        tdAvg.className = 'avgcell';
+        if (mins.length){
+          var avgMin = Math.round(mins.reduce(function(a,b){return a+b;},0)/mins.length);
+          var avgMax = Math.round(maxs.reduce(function(a,b){return a+b;},0)/maxs.length);
+          tdAvg.innerHTML = '<span class="range mono" style="color:var(--gold-ink)">'+avgMin+'&ndash;'+avgMax+'</span>' +
+            '<span class="avg-n">of '+mins.length+' show'+(mins.length===1?'':'s')+'</span>';
+        } else {
+          tdAvg.innerHTML = '<span class="empty-dash">&mdash;</span>';
+        }
+        tr.appendChild(tdAvg);
+        tbody.appendChild(tr);
+      });
+    });
+  }
+
+  function appendBreedRow(tbody, breed, showCount){
+    var tr = document.createElement('tr');
+    tr.className = 'breedrow';
+    var td = document.createElement('td');
+    td.colSpan = showCount + 2;
+    td.textContent = breed;
+    td.style.borderLeft = '3px solid ' + (BREED_COLORS[breed] || 'var(--line)');
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  // ---------- modal ----------
+  function buildClassGroups(templateKey, entries){
+    var container = document.getElementById('classGroups');
+    container.innerHTML = '';
+    var tpl = TEMPLATES[templateKey];
+    groupByBreed(tpl.rows).forEach(function(g, idx){
+      var det = document.createElement('details');
+      det.className = 'breedgroup';
+      if (idx === 0) det.open = true;
+      var summary = document.createElement('summary');
+      summary.innerHTML = '<span>'+g.breed+' &middot; '+g.rows.length+' class'+(g.rows.length===1?'':'es')+'</span><span class="chev">&#9656;</span>';
+      det.appendChild(summary);
+
+      var heads = document.createElement('div');
+      heads.className = 'colheads';
+      heads.innerHTML = '<span>Class</span><span>Min</span><span>Max</span><span>Note</span>';
+      det.appendChild(heads);
+
+      g.rows.forEach(function(r){
+        var row = document.createElement('div');
+        row.className = 'classrow';
+        var existing = entries && entries[r.k];
+        row.innerHTML =
+          '<label class="clabel" for="min_'+r.k+'">'+r.l+'</label>' +
+          '<input class="mono" type="number" inputmode="numeric" id="min_'+r.k+'" placeholder="min" value="'+(existing&&existing.min!=null?existing.min:'')+'">' +
+          '<input class="mono" type="number" inputmode="numeric" id="max_'+r.k+'" placeholder="max" value="'+(existing&&existing.max!=null?existing.max:'')+'">' +
+          '<input type="text" id="note_'+r.k+'" placeholder="&ndash;" maxlength="16" value="'+(existing&&existing.note?escapeHtml(existing.note):'')+'">';
+        det.appendChild(row);
+      });
+      container.appendChild(det);
+    });
+  }
+
+  function openModal(show){
+    state.editingId = show ? show.id : null;
+    document.getElementById('modalTitle').textContent = show ? 'Edit Show' : 'Add Show';
+    document.getElementById('showName').value = show ? show.name : '';
+    document.getElementById('showDate').value = show ? show.date : '';
+    document.getElementById('showJudge').value = show ? (show.judge||'') : '';
+    document.getElementById('deleteShowBtn').hidden = !show;
+    buildClassGroups(state.template, show ? show.entries : null);
+    document.getElementById('scrim').hidden = false;
+    document.getElementById('showName').focus();
+  }
+
+  function closeModal(){
+    document.getElementById('scrim').hidden = true;
+    state.editingId = null;
+  }
+
+  function collectEntriesFromForm(){
+    var tpl = TEMPLATES[state.template];
+    var entries = {};
+    tpl.rows.forEach(function(r){
+      var minEl = document.getElementById('min_'+r.k);
+      var maxEl = document.getElementById('max_'+r.k);
+      var noteEl = document.getElementById('note_'+r.k);
+      if (!minEl) return;
+      var minV = minEl.value.trim();
+      var maxV = maxEl.value.trim();
+      if (minV === '' && maxV === '') return;
+      var entry = {};
+      if (minV !== '') entry.min = parseFloat(minV);
+      if (maxV !== '') entry.max = parseFloat(maxV);
+      if (entry.min == null) entry.min = entry.max;
+      if (entry.max == null) entry.max = entry.min;
+      var noteV = noteEl.value.trim();
+      if (noteV) entry.note = noteV;
+      entries[r.k] = entry;
+    });
+    return entries;
+  }
+
+  async function saveShow(){
+    var name = document.getElementById('showName').value.trim();
+    var date = document.getElementById('showDate').value;
+    var judge = document.getElementById('showJudge').value.trim();
+    if (!name){ showToast('Give the show a name first.'); document.getElementById('showName').focus(); return; }
+    if (!date){ showToast('Pick a date for the show.'); document.getElementById('showDate').focus(); return; }
+
+    var data = { name: name, date: date, judge: judge, template: state.template, series: state.series, entries: collectEntriesFromForm() };
+
+    var saveBtn = document.getElementById('saveShowBtn');
+    saveBtn.disabled = true;
+    try {
+      if (!dbAvailable){
+        showToast('Storage isn’t available in this view.');
+        return;
+      }
+      if (state.editingId){
+        await db.collection('shows').doc(state.editingId).set(data);
+        showToast('Show updated.');
+      } else {
+        await db.collection('shows').add(data);
+        showToast('Show added.');
+      }
+      closeModal();
+    } catch (err){
+      showToast('Couldn’t save: ' + (err && err.message ? err.message : 'try again'));
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
+
+  async function deleteShow(){
+    if (!state.editingId) return;
+    if (!dbAvailable){ showToast('Storage isn’t available in this view.'); return; }
+    var id = state.editingId;
+    var btn = document.getElementById('deleteShowBtn');
+    btn.disabled = true;
+    try {
+      await db.collection('shows').doc(id).delete();
+      showToast('Show deleted.');
+      closeModal();
+    } catch (err){
+      showToast('Couldn’t delete: ' + (err && err.message ? err.message : 'try again'));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ---------- template / series switching ----------
+  function renderTemplateTabs(){
+    var tabs = document.getElementById('tabs');
+    var keys = SERIES[state.series].templates;
+    tabs.innerHTML = keys.map(function(k){
+      return '<button class="tab" role="tab" data-template="'+k+'" aria-selected="'+(k===state.template?'true':'false')+'">'+escapeHtml(TEMPLATES[k].label)+'</button>';
+    }).join('');
+  }
+
+  function switchTemplate(key){
+    state.template = key;
+    document.querySelectorAll('#tabs .tab').forEach(function(btn){
+      btn.setAttribute('aria-selected', btn.dataset.template === key ? 'true' : 'false');
+    });
+    renderTable();
+  }
+
+  function switchSeries(key){
+    if (!SERIES[key] || state.series === key) return;
+    state.series = key;
+    state.template = SERIES[key].templates[0];
+    renderSeriesTabs();
+    renderTemplateTabs();
+    renderTable();
+  }
+
+  function renderSeriesTabs(){
+    var el = document.getElementById('seriesTabs');
+    var html = SERIES_ORDER.map(function(k){
+      return '<button class="tab" role="tab" data-series="'+escapeHtml(k)+'" aria-selected="'+(k===state.series?'true':'false')+'">'+escapeHtml(SERIES[k].label)+'</button>';
+    }).join('');
+    if (dbAvailable) html += '<button class="tab addtab" data-action="add" title="Add a new show tab">+ Add Tab</button>';
+    el.innerHTML = html;
+    document.getElementById('editSeriesBtn').hidden = !(SERIES[state.series] && !SERIES[state.series].builtin);
+  }
+
+  // ---------- add / edit / delete a tab (show series) ----------
+  var seriesEditingId = null, seriesDeleteArmed = false, pendingSwitchId = null;
+
+  function openSeriesModal(ser){
+    seriesEditingId = ser ? ser.id : null;
+    seriesDeleteArmed = false;
+    document.getElementById('seriesTitle').textContent = ser ? 'Edit Tab' : 'Add Tab';
+    document.getElementById('seriesName').value = ser ? ser.name : '';
+    var del = document.getElementById('deleteSeriesBtn');
+    del.hidden = !ser; del.textContent = 'Delete Tab';
+    var used = {};
+    if (ser) ALL_TEMPLATE_KEYS.forEach(function(k){
+      if ((state.shows[k] || []).some(function(s){ return s.series === ser.id; })) used[k] = true;
+    });
+    var picked = ser ? ser.templates : [];
+    document.getElementById('layoutChecks').innerHTML = ALL_TEMPLATE_KEYS.map(function(k){
+      var isOn = picked.indexOf(k) > -1 || used[k];
+      return '<label><input type="checkbox" value="'+k+'"'+(isOn?' checked':'')+(used[k]?' disabled':'')+'>' +
+        '<span>'+escapeHtml(TEMPLATES[k].label)+' <span class="muted">&middot; '+TEMPLATES[k].rows.length+' classes'+(used[k]?' &middot; has shows':'')+'</span></span></label>';
+    }).join('');
+    document.getElementById('seriesScrim').hidden = false;
+    document.getElementById('seriesName').focus();
+  }
+
+  function closeSeriesModal(){
+    document.getElementById('seriesScrim').hidden = true;
+    seriesEditingId = null; seriesDeleteArmed = false;
+  }
+
+  async function saveSeries(){
+    var name = document.getElementById('seriesName').value.trim();
+    var picks = Array.prototype.map.call(document.querySelectorAll('#layoutChecks input:checked'), function(i){ return i.value; });
+    if (!name){ showToast('Give the tab a name first.'); document.getElementById('seriesName').focus(); return; }
+    if (!picks.length){ showToast('Pick at least one class layout.'); return; }
+    if (!dbAvailable){ showToast('Storage isn’t available in this view.'); return; }
+    var btn = document.getElementById('saveSeriesBtn');
+    btn.disabled = true;
+    try {
+      if (seriesEditingId){
+        var cur = customSeries.filter(function(c){ return c.id === seriesEditingId; })[0];
+        await db.collection('series').doc(seriesEditingId).set({ name: name, templates: picks, created: cur ? cur.created : Date.now() });
+        showToast('Tab updated.');
+      } else {
+        var ref = await db.collection('series').add({ name: name, templates: picks, created: Date.now() });
+        if (ref && ref.id){
+          pendingSwitchId = ref.id;
+          if (SERIES[ref.id]) { switchSeries(ref.id); pendingSwitchId = null; }
+        }
+        showToast('Tab added.');
+      }
+      closeSeriesModal();
+    } catch (err){
+      showToast('Couldn’t save: ' + (err && err.message ? err.message : 'try again'));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function deleteSeries(){
+    if (!seriesEditingId || !dbAvailable) return;
+    var id = seriesEditingId;
+    var doomed = [];
+    ALL_TEMPLATE_KEYS.forEach(function(k){
+      (state.shows[k] || []).forEach(function(s){ if (s.series === id) doomed.push(s.id); });
+    });
+    var btn = document.getElementById('deleteSeriesBtn');
+    if (!seriesDeleteArmed){
+      seriesDeleteArmed = true;
+      btn.textContent = doomed.length ? 'Tap again: delete tab + ' + doomed.length + ' show' + (doomed.length===1?'':'s') : 'Tap again to delete';
+      setTimeout(function(){ if (seriesDeleteArmed && seriesEditingId === id){ seriesDeleteArmed = false; btn.textContent = 'Delete Tab'; } }, 4000);
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await Promise.all(doomed.map(function(sid){ return db.collection('shows').doc(sid).delete(); }));
+      await db.collection('series').doc(id).delete();
+      showToast('Tab deleted.');
+      closeSeriesModal();
+    } catch (err){
+      showToast('Couldn’t delete: ' + (err && err.message ? err.message : 'try again'));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ---------- export (Excel / PDF) ----------
+  var dl = null;
+  var EXCELJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+  var JSPDF_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  var AUTOTABLE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+  var libCache = {};
+
+  function loadScript(url){
+    if (libCache[url]) return libCache[url];
+    libCache[url] = new Promise(function(resolve, reject){
+      var s = document.createElement('script');
+      s.src = url;
+      s.onload = function(){ resolve(); };
+      s.onerror = function(){ delete libCache[url]; reject(new Error('Couldn’t load the export tools. Check your connection.')); };
+      document.head.appendChild(s);
+    });
+    return libCache[url];
+  }
+
+  function mean(a){ return a.reduce(function(x,y){ return x+y; }, 0) / a.length; }
+
+  function buildModel(key){
+    var tpl = TEMPLATES[key];
+    var shows = (state.shows[key] || []).filter(function(s){ return s.series === state.series; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+    var groups = groupByBreed(tpl.rows).map(function(g){
+      return { breed: g.breed, rows: g.rows.map(function(r){
+        var mins = [], maxs = [];
+        var cells = shows.map(function(s){
+          var e = s.entries && s.entries[r.k];
+          if (e && typeof e.min === 'number' && typeof e.max === 'number'){
+            mins.push(e.min); maxs.push(e.max);
+            return e.min + '-' + e.max + (e.note ? ' (' + e.note + ')' : '');
+          }
+          return '';
+        });
+        var avg = mins.length ? { text: Math.round(mean(mins)) + '-' + Math.round(mean(maxs)), n: mins.length } : null;
+        return { label: r.l, cells: cells, avg: avg };
+      }) };
+    });
+    return { tpl: tpl, shows: shows, groups: groups };
+  }
+
+  function fileSafe(s){ return String(s).replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, ''); }
+
+  function handleSaveError(err){
+    var code = err && err.code;
+    if (code === 'declined') { showToast('Download cancelled.'); return; }
+    if (code === 'rate_limited') { showToast('One download at a time — try again in a moment.'); return; }
+    if (code === 'unavailable' || code === 'not_granted' || code === 'capability_disabled' || code === 'capability_removed'){
+      document.getElementById('exportGroup').hidden = true;
+      showToast('Downloads aren’t available in this view.');
+      return;
+    }
+    showToast('Couldn’t export: ' + (err && err.message ? err.message : 'try again'));
+  }
+
+  async function exportExcel(){
+    var series = SERIES[state.series];
+    var models = series.templates.map(buildModel).filter(function(m){ return m.shows.length; });
+    if (!models.length){ showToast('Nothing to export yet — add a show first.'); return; }
+    var btn = document.getElementById('exportXlsxBtn');
+    btn.disabled = true;
+    try {
+      await loadScript(EXCELJS_URL);
+      var wb = new ExcelJS.Workbook();
+      var BLACK = 'FF000000', SILVER = 'FFC9C9C9', DARK = 'FF1C1C1C', WHITE = 'FFFFFFFF';
+      var thin = { style: 'thin', color: { argb: 'FF8F8F8F' } };
+      var border = { top: thin, left: thin, bottom: thin, right: thin };
+
+      models.forEach(function(m){
+        var ws = wb.addWorksheet(m.tpl.label.replace(/[\\\/\?\*\[\]:]/g, '-').slice(0, 31));
+        var ncol = m.shows.length + 2;
+
+        ws.mergeCells(1, 1, 1, ncol);
+        var title = ws.getCell(1, 1);
+        title.value = series.label + ' - ' + m.tpl.label + ' - Weigh Breaks';
+        title.font = { bold: true, size: 14 };
+
+        function headerRow(r, label, vals){
+          var row = ws.getRow(r);
+          row.getCell(1).value = label;
+          vals.forEach(function(v, i){ row.getCell(i + 2).value = v; });
+          for (var c = 1; c <= ncol; c++){
+            var cell = row.getCell(c);
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BLACK } };
+            cell.font = { bold: r === 3, color: { argb: WHITE }, size: r === 3 ? 12 : 10 };
+            cell.alignment = { horizontal: c === 1 ? 'left' : 'center', vertical: 'middle', wrapText: true };
+            cell.border = border;
+          }
+        }
+        headerRow(3, 'Class', m.shows.map(showYearLabel).concat(['Average']));
+        headerRow(4, 'Judge', m.shows.map(function(s){ return s.judge || ''; }).concat(['']));
+        headerRow(5, 'Date', m.shows.map(function(s){ return fmtDate(s.date); }).concat(['']));
+        ws.getRow(4).height = 30;
+
+        var r = 6;
+        m.groups.forEach(function(g){
+          ws.mergeCells(r, 1, r, ncol);
+          var bc = ws.getCell(r, 1);
+          bc.value = g.breed;
+          bc.font = { bold: true, color: { argb: BLACK } };
+          bc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SILVER } };
+          bc.border = border;
+          r++;
+          g.rows.forEach(function(row){
+            var xr = ws.getRow(r);
+            xr.getCell(1).value = row.label;
+            row.cells.forEach(function(t, i){ xr.getCell(i + 2).value = t || ''; });
+            var ac = xr.getCell(ncol);
+            ac.value = row.avg ? row.avg.text : '';
+            for (var c = 1; c <= ncol; c++){
+              var cell = xr.getCell(c);
+              cell.border = border;
+              cell.alignment = { horizontal: c === 1 ? 'left' : 'center', vertical: 'middle' };
+            }
+            ac.font = { bold: true, color: { argb: WHITE } };
+            ac.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DARK } };
+            r++;
+          });
+        });
+
+        ws.getColumn(1).width = 24;
+        for (var c = 2; c <= ncol; c++) ws.getColumn(c).width = 17;
+        ws.views = [{ state: 'frozen', xSplit: 1, ySplit: 5 }];
+        ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+      });
+
+      var buf = await wb.xlsx.writeBuffer();
+      var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      await dl.save({ filename: fileSafe(series.label) + '_Weigh_Breaks.xlsx', data: blob });
+      showToast('Excel file saved.');
+    } catch (err){
+      handleSaveError(err);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function exportPdf(){
+    var m = buildModel(state.template);
+    if (!m.shows.length){ showToast('Nothing to export yet — add a show first.'); return; }
+    var btn = document.getElementById('exportPdfBtn');
+    btn.disabled = true;
+    try {
+      await loadScript(JSPDF_URL);
+      await loadScript(AUTOTABLE_URL);
+      var doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+      var series = SERIES[state.series];
+      var ncol = m.shows.length + 2;
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+      doc.text(series.label + ' - ' + m.tpl.label, 36, 38);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(90);
+      doc.text('Weigh breaks by class. Average = mean of each show\'s minimum and maximum across the shows that held the class.   Printed ' +
+        new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }), 36, 52);
+      doc.setTextColor(0);
+
+      var head = [['Class'].concat(m.shows.map(function(s){
+        return showYearLabel(s) + (s.judge ? '\n' + s.judge : '');
+      })).concat(['Average'])];
+
+      var body = [];
+      m.groups.forEach(function(g){
+        body.push([{ content: g.breed, colSpan: ncol, styles: { fillColor: [201, 201, 201], textColor: [10, 10, 10], fontStyle: 'bold', halign: 'left' } }]);
+        g.rows.forEach(function(row){
+          body.push([row.label].concat(row.cells).concat([row.avg ? row.avg.text : '']));
+        });
+      });
+
+      var colStyles = {};
+      colStyles[0] = { halign: 'left', fontStyle: 'bold', cellWidth: 82 };
+      colStyles[ncol - 1] = { halign: 'center', fontStyle: 'bold', fillColor: [28, 28, 28], textColor: [255, 255, 255] };
+
+      doc.autoTable({
+        head: head,
+        body: body,
+        startY: 62,
+        margin: { left: 36, right: 36, top: 36, bottom: 34 },
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 3, halign: 'center', valign: 'middle', lineColor: [143, 143, 143], lineWidth: 0.4, textColor: [20, 20, 20] },
+        headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+        columnStyles: colStyles,
+        didParseCell: function(data){
+          if (data.section === 'head' && data.column.index === 0) data.cell.styles.halign = 'left';
+        },
+        didDrawPage: function(){
+          var pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight();
+          doc.setFontSize(8); doc.setTextColor(110);
+          doc.text('Weigh-Break Recorder', 36, ph - 16);
+          doc.text('Page ' + doc.internal.getNumberOfPages(), pw - 36, ph - 16, { align: 'right' });
+          doc.setTextColor(0);
+        }
+      });
+
+      var blob = doc.output('blob');
+      await dl.save({ filename: fileSafe(series.label + ' ' + m.tpl.label) + '_Weigh_Breaks.pdf', data: blob });
+      showToast('PDF saved.');
+    } catch (err){
+      handleSaveError(err);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ---------- wiring ----------
+  document.getElementById('resetWidthsBtn').addEventListener('click', function(){
+    delete allWidths[widthKey()];
+    persistWidths();
+    applyColWidths();
+  });
+  document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
+  document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
+  document.getElementById('seriesTabs').addEventListener('click', function(e){
+    var btn = e.target.closest('.tab');
+    if (!btn) return;
+    if (btn.dataset.action === 'add'){ openSeriesModal(null); return; }
+    switchSeries(btn.dataset.series);
+  });
+  document.getElementById('editSeriesBtn').addEventListener('click', function(){
+    var ser = customSeries.filter(function(c){ return c.id === state.series; })[0];
+    if (ser) openSeriesModal(ser);
+  });
+  document.getElementById('closeSeries').addEventListener('click', closeSeriesModal);
+  document.getElementById('cancelSeries').addEventListener('click', closeSeriesModal);
+  document.getElementById('saveSeriesBtn').addEventListener('click', saveSeries);
+  document.getElementById('deleteSeriesBtn').addEventListener('click', deleteSeries);
+  document.getElementById('seriesScrim').addEventListener('click', function(e){
+    if (e.target.id === 'seriesScrim') closeSeriesModal();
+  });
+  document.getElementById('tabs').addEventListener('click', function(e){
+    var btn = e.target.closest('.tab');
+    if (!btn) return;
+    switchTemplate(btn.dataset.template);
+  });
+  document.getElementById('addShowBtn').addEventListener('click', function(){ openModal(null); });
+  document.getElementById('closeModal').addEventListener('click', closeModal);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('saveShowBtn').addEventListener('click', saveShow);
+  document.getElementById('deleteShowBtn').addEventListener('click', deleteShow);
+  document.getElementById('scrim').addEventListener('click', function(e){
+    if (e.target.id === 'scrim') closeModal();
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Escape') return;
+    if (!document.getElementById('seriesScrim').hidden) closeSeriesModal();
+    else if (!document.getElementById('scrim').hidden) closeModal();
+  });
+
+  renderTemplateTabs();
+  renderTable();
+
+  // ---------- capability wiring ----------
+  (async function initDownloads(){
+    try {
+      if (!window.claude || !window.claude.use) return;
+      dl = await window.claude.use('downloads');
+      if (dl) document.getElementById('exportGroup').hidden = false;
+    } catch (err){ dl = null; }
+  })();
+
+  (async function init(){
+    try {
+      if (!window.claude || !window.claude.use){ dbAvailable = false; renderTable(); return; }
+      db = await window.claude.use('db');
+      if (!db){ dbAvailable = false; renderTable(); return; }
+      dbAvailable = true;
+      renderSeriesTabs();
+      db.collection('series').onSnapshot(function(snap){
+        customSeries = snap.docs.map(function(d){
+          var data = d.data() || {};
+          return { id: d.id, name: data.name || 'Untitled tab', created: data.created || 0,
+            templates: (Array.isArray(data.templates) ? data.templates : []).filter(function(k){ return TEMPLATES[k]; }) };
+        }).filter(function(c){ return c.templates.length; })
+          .sort(function(a,b){ return a.created - b.created; });
+        rebuildSeries();
+        if (!SERIES[state.series]){ state.series = 'naile'; state.template = SERIES.naile.templates[0]; }
+        else if (SERIES[state.series].templates.indexOf(state.template) < 0){ state.template = SERIES[state.series].templates[0]; }
+        if (pendingSwitchId && SERIES[pendingSwitchId]){ var pid = pendingSwitchId; pendingSwitchId = null; state.series = pid; state.template = SERIES[pid].templates[0]; }
+        renderSeriesTabs(); renderTemplateTabs(); renderTable();
+      }, function(err){
+        showToast('Couldn’t load tabs: ' + (err && err.message ? err.message : 'unknown error'));
+      });
+      ALL_TEMPLATE_KEYS.forEach(function(tplKey){
+        db.collection('shows').where('template','==',tplKey).onSnapshot(function(snap){
+          state.shows[tplKey] = snap.docs.map(function(d){
+            var data = d.data() || {};
+            return { id: d.id, name: data.name||'Untitled show', date: data.date||'', judge: data.judge||'', series: data.series||'naile', entries: data.entries||{} };
+          });
+          state.loaded[tplKey] = true;
+          renderTable();
+        }, function(err){
+          state.loaded[tplKey] = true;
+          renderTable();
+          showToast('Couldn’t load shows: ' + (err && err.message ? err.message : 'unknown error'));
+        });
+      });
+    } catch (err){
+      dbAvailable = false;
+      renderTable();
+    }
+  })();
+})();
+</script>
+
+</body>
+</html>
