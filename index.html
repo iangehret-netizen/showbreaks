@@ -185,6 +185,7 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
   <div class="seriesrow" role="tablist" id="seriesTabs">
     <button class="tab" role="tab" data-series="naile" aria-selected="true">NAILE</button>
     <button class="tab" role="tab" data-series="osf" aria-selected="false">Ohio State Fair</button>
+    <button class="tab" role="tab" data-series="clark" aria-selected="false">Clark County Fair</button>
   </div>
   <div class="topbar">
     <div>
@@ -352,24 +353,49 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     .concat(breedRows('Natural Colored','natural',4))
     .concat(breedRows('Black Face Cross','bfx',10));
 
+  // Clark County Fair row sets (from the 2026 show bills; groups follow the divisions)
+  function clarkRows(groups){
+    var out = [];
+    groups.forEach(function(g){
+      g.classes.forEach(function(c){
+        out.push({k: c==='UW' ? 'uw' : 'cl'+c, l: c==='UW' ? 'Underweight' : 'Class '+c, b: g.name});
+      });
+    });
+    return out;
+  }
+  var CLARK_JR_ROWS = clarkRows([
+    {name:'Division 1', classes:['UW',1,2,3]}, {name:'Division 2', classes:[4,5,6,7]},
+    {name:'Division 3', classes:[8,9,10]}, {name:'Division 4', classes:[11,12,13,14]}
+  ]);
+  var CLARK_BR_ROWS = clarkRows([
+    {name:'Division 1', classes:['UW',1,2,3]}, {name:'Division 2', classes:[4,5,6]}, {name:'Division 3', classes:[7,8,9]}
+  ]);
+  var CLARK_OPEN_ROWS = clarkRows([{name:'Open Market Lambs', classes:[1,2,3,4,5,6]}]);
+  var CLARK_EWE_ROWS = clarkRows([{name:'Commercial Ewes', classes:[7,8,9,10]}]);
+
   var TEMPLATES = {
     purebred: { label: 'Purebred / Market Wethers', rows: PUREBRED_ROWS },
     commercial: { label: 'Commercial Ewes', rows: COMMERCIAL_ROWS },
     osfewe: { label: 'Ewe / Jackpot Classes', rows: OSF_EWE_ROWS },
     osfjrmarket: { label: 'Jr Market', rows: OSF_JR_ROWS },
-    osfopenmarket: { label: 'Open Market', rows: OSF_OPEN_ROWS }
+    osfopenmarket: { label: 'Open Market', rows: OSF_OPEN_ROWS },
+    clarkewe: { label: 'Ewe Show', rows: CLARK_EWE_ROWS },
+    clarkbr: { label: 'County Born & Raised', rows: CLARK_BR_ROWS },
+    clarkopen: { label: 'Open Class', rows: CLARK_OPEN_ROWS },
+    clarkjr: { label: 'Junior Show', rows: CLARK_JR_ROWS }
   };
 
   var BUILTIN_SERIES = {
     naile: { label: 'NAILE', templates: ['purebred','commercial'], builtin: true },
-    osf: { label: 'Ohio State Fair', templates: ['osfewe','osfjrmarket','osfopenmarket'], builtin: true }
+    osf: { label: 'Ohio State Fair', templates: ['osfewe','osfjrmarket','osfopenmarket'], builtin: true },
+    clark: { label: 'Clark County Fair', templates: ['clarkewe','clarkbr','clarkopen','clarkjr'], builtin: true }
   };
   var SERIES = {}, SERIES_ORDER = [];
   var customSeries = [];   // [{id, name, templates, created}] from the db
 
   function rebuildSeries(){
     SERIES = {}; SERIES_ORDER = [];
-    ['naile','osf'].forEach(function(k){ SERIES[k] = BUILTIN_SERIES[k]; SERIES_ORDER.push(k); });
+    ['naile','osf','clark'].forEach(function(k){ SERIES[k] = BUILTIN_SERIES[k]; SERIES_ORDER.push(k); });
     customSeries.forEach(function(c){
       if (SERIES[c.id]) return;
       SERIES[c.id] = { label: c.name, templates: c.templates, builtin: false, created: c.created };
@@ -1221,6 +1247,5 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
   })();
 })();
 </script>
-
 </body>
 </html>

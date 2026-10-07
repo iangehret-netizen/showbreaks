@@ -1,7 +1,7 @@
 # Weigh-Break Recorder: GitHub Pages + Firebase sync
 
 Static site (no build step). Shows sync across all your devices through Firebase (Google sign-in + Firestore).
-Until you paste your Firebase config, the site runs in "this browser only" mode, so nothing breaks.
+Your Firebase config (project "weighbreaks") is already filled into `firebase-config.js`, so skip step 2 below.
 
 ## Files
 - `index.html`: the app

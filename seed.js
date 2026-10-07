@@ -1579,3 +1579,182 @@ window.GSC_SEED = {
   }
  }
 };
+// Added later: each block is loaded once per account (tracked by its flag), so existing data is never overwritten.
+window.GSC_SEED.extras = [{ flag: "clark2026", shows: {
+ "clark-2026-ewe": {
+  "name": "Clark County Fair 2026",
+  "date": "2026-07-01",
+  "judge": "",
+  "series": "clark",
+  "template": "clarkewe",
+  "entries": {
+   "cl7": {
+    "min": 91,
+    "max": 109
+   },
+   "cl8": {
+    "min": 112,
+    "max": 115
+   },
+   "cl9": {
+    "min": 117,
+    "max": 128
+   },
+   "cl10": {
+    "min": 136,
+    "max": 150
+   }
+  }
+ },
+ "clark-2026-br": {
+  "name": "Clark County Fair 2026",
+  "date": "2026-07-01",
+  "judge": "",
+  "series": "clark",
+  "template": "clarkbr",
+  "entries": {
+   "uw": {
+    "min": 91,
+    "max": 91
+   },
+   "cl1": {
+    "min": 95,
+    "max": 99
+   },
+   "cl2": {
+    "min": 101,
+    "max": 108
+   },
+   "cl3": {
+    "min": 109,
+    "max": 115
+   },
+   "cl4": {
+    "min": 119,
+    "max": 121
+   },
+   "cl5": {
+    "min": 123,
+    "max": 130
+   },
+   "cl6": {
+    "min": 134,
+    "max": 136
+   },
+   "cl7": {
+    "min": 138,
+    "max": 143
+   },
+   "cl8": {
+    "min": 144,
+    "max": 151
+   },
+   "cl9": {
+    "min": 152,
+    "max": 167
+   }
+  }
+ },
+ "clark-2026-open": {
+  "name": "Clark County Fair 2026",
+  "date": "2026-07-01",
+  "judge": "",
+  "series": "clark",
+  "template": "clarkopen",
+  "entries": {
+   "cl1": {
+    "min": 91,
+    "max": 102
+   },
+   "cl2": {
+    "min": 105,
+    "max": 115
+   },
+   "cl3": {
+    "min": 117,
+    "max": 123
+   },
+   "cl4": {
+    "min": 124,
+    "max": 128
+   },
+   "cl5": {
+    "min": 130,
+    "max": 138
+   },
+   "cl6": {
+    "min": 141,
+    "max": 167
+   }
+  }
+ },
+ "clark-2026-jr": {
+  "name": "Clark County Fair 2026",
+  "date": "2026-07-01",
+  "judge": "",
+  "series": "clark",
+  "template": "clarkjr",
+  "entries": {
+   "uw": {
+    "min": 91,
+    "max": 91
+   },
+   "cl1": {
+    "min": 95,
+    "max": 101
+   },
+   "cl2": {
+    "min": 102,
+    "max": 106
+   },
+   "cl3": {
+    "min": 108,
+    "max": 113
+   },
+   "cl4": {
+    "min": 114,
+    "max": 117
+   },
+   "cl5": {
+    "min": 118,
+    "max": 121
+   },
+   "cl6": {
+    "min": 123,
+    "max": 124
+   },
+   "cl7": {
+    "min": 125,
+    "max": 127
+   },
+   "cl8": {
+    "min": 128,
+    "max": 130
+   },
+   "cl9": {
+    "min": 132,
+    "max": 134
+   },
+   "cl10": {
+    "min": 135,
+    "max": 138
+   },
+   "cl11": {
+    "min": 140,
+    "max": 142
+   },
+   "cl12": {
+    "min": 143,
+    "max": 144
+   },
+   "cl13": {
+    "min": 147,
+    "max": 150
+   },
+   "cl14": {
+    "min": 151,
+    "max": 167
+   }
+  }
+ }
+} }];

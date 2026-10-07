@@ -1,10 +1,10 @@
-/* Paste your Firebase web-app config here (Firebase console > Project settings > Your apps > Web app).
-   While apiKey still says PASTE_..., the site runs in "this browser only" mode with no sync. */
+/* Firebase web-app config for the "weighbreaks" project.
+   (These values are not secrets; your Firestore rules and Google sign-in protect the data.) */
 window.FIREBASE_CONFIG = {
-  apiKey: "PASTE_YOUR_API_KEY",
-  authDomain: "PASTE_YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "PASTE_YOUR_PROJECT_ID",
-  storageBucket: "PASTE_YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "PASTE_YOUR_SENDER_ID",
-  appId: "PASTE_YOUR_APP_ID"
+  apiKey: "AIzaSyAID8w-r6bx0vp95VASHzS0Ms9kNMf9Y_c",
+  authDomain: "weighbreaks.firebaseapp.com",
+  projectId: "weighbreaks",
+  storageBucket: "weighbreaks.firebasestorage.app",
+  messagingSenderId: "345976048322",
+  appId: "1:345976048322:web:0a52a2d9f6c09d466b895b"
 };

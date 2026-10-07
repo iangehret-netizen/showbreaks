@@ -42,6 +42,42 @@
     '.gscgate-card .gatemsg{margin-top:12px;font-size:.82rem;color:#a33;min-height:1em}';
   document.head.appendChild(css);
 
+  // ---------- sync pill ----------
+  var pillEl = null, pillState = { pending: 0, error: false };
+  var pcss = document.createElement('style');
+  pcss.textContent =
+    '.syncpill{position:fixed;top:12px;right:12px;z-index:50;display:inline-flex;align-items:center;gap:7px;padding:5px 12px 5px 10px;border-radius:999px;font:600 12px/1 system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:.02em;background:#e6f6ea;color:#14602b;border:1px solid #8fd3a3;box-shadow:0 1px 4px rgba(0,0,0,.25)}' +
+    '.syncpill i{width:8px;height:8px;border-radius:50%;background:#22b54b;box-shadow:0 0 0 0 rgba(34,181,75,.6)}' +
+    '.syncpill.synced i{animation:syncpulse 2.4s ease-out infinite}' +
+    '.syncpill.syncing{background:#fff6dd;color:#7a5a00;border-color:#e3c46b}.syncpill.syncing i{background:#e0a800;animation:syncblink .8s ease-in-out infinite}' +
+    '.syncpill.offline{background:#eceef0;color:#444;border-color:#b5bac0}.syncpill.offline i{background:#8a9099}' +
+    '.syncpill.error{background:#fde8e8;color:#8a1c1c;border-color:#e59a9a}.syncpill.error i{background:#d23b3b}' +
+    '@keyframes syncpulse{0%{box-shadow:0 0 0 0 rgba(34,181,75,.55)}70%,100%{box-shadow:0 0 0 7px rgba(34,181,75,0)}}' +
+    '@keyframes syncblink{50%{opacity:.35}}' +
+    '@media (prefers-reduced-motion:reduce){.syncpill i{animation:none!important}}';
+  document.head.appendChild(pcss);
+  function renderPill(){
+    if (!pillEl){
+      pillEl = document.createElement('div');
+      pillEl.className = 'syncpill'; pillEl.setAttribute('role', 'status'); pillEl.setAttribute('aria-live', 'polite');
+      pillEl.innerHTML = '<i></i><span></span>';
+      document.body.appendChild(pillEl);
+    }
+    var st, label;
+    if (!navigator.onLine){ st = 'offline'; label = 'Offline' + (pillState.pending ? ' · ' + pillState.pending + ' waiting' : ''); }
+    else if (pillState.error){ st = 'error'; label = 'Sync problem'; }
+    else if (pillState.pending){ st = 'syncing'; label = 'Syncing…'; }
+    else { st = 'synced'; label = 'Synced'; }
+    pillEl.className = 'syncpill ' + st;
+    pillEl.lastChild.textContent = label;
+    pillEl.title = st === 'synced' ? 'All changes are saved to the cloud' : st === 'syncing' ? 'Saving changes to the cloud' : st === 'offline' ? 'Changes are saved on this device and will sync when you reconnect' : 'Couldn’t reach the cloud; changes are kept on this device';
+  }
+  function trackWrite(p){
+    pillState.pending++; renderPill();
+    return Promise.resolve(p).then(function(v){ pillState.pending--; pillState.error = false; renderPill(); return v; },
+      function(e){ pillState.pending--; pillState.error = true; renderPill(); throw e; });
+  }
+
   // ---------- footer: backup / restore (+ extras) ----------
   function buildFooter(opts){
     function mount(){
@@ -105,6 +141,12 @@
       save();
     }
     if (!data.series) data.series = {};
+    if (!data.seeded) data.seeded = {};
+    ((window.GSC_SEED || {}).extras || []).forEach(function(ex){
+      if (data.seeded[ex.flag]) return;
+      Object.keys(ex.shows).forEach(function(id){ if (!data.shows[id]) data.shows[id] = clone(ex.shows[id]); });
+      data.seeded[ex.flag] = true; save();
+    });
 
     function snap(coll, filt){
       return { docs: Object.keys(data[coll]).filter(function(id){ return !filt || filt(data[coll][id]); }).map(function(id){
@@ -191,10 +233,10 @@
       var db = { collection: function(c){
         var col = fsM.collection(firestore, c);
         return {
-          where: function(f, op, v){ var q = fsM.query(col, fsM.where(f, op, v)); return { onSnapshot: function(cb, err){ return fsM.onSnapshot(q, cb, err); } }; },
-          onSnapshot: function(cb, err){ return fsM.onSnapshot(col, cb, err); },
-          add: function(d){ return fsM.addDoc(col, d); },
-          doc: function(id){ var ref = fsM.doc(firestore, c, id); return { set: function(d){ return fsM.setDoc(ref, d); }, delete: function(){ return fsM.deleteDoc(ref); } }; }
+          where: function(f, op, v){ var q = fsM.query(col, fsM.where(f, op, v)); return { onSnapshot: function(cb, err){ return fsM.onSnapshot(q, cb, function(e){ pillState.error = true; renderPill(); if (err) err(e); }); } }; },
+          onSnapshot: function(cb, err){ return fsM.onSnapshot(col, cb, function(e){ pillState.error = true; renderPill(); if (err) err(e); }); },
+          add: function(d){ return trackWrite(fsM.addDoc(col, d)); },
+          doc: function(id){ var ref = fsM.doc(firestore, c, id); return { set: function(d){ return trackWrite(fsM.setDoc(ref, d)); }, delete: function(){ return trackWrite(fsM.deleteDoc(ref)); } }; }
         };
       } };
 
@@ -212,7 +254,7 @@
         for (var i = 0; i < items.length; i += 400){
           var b = fsM.writeBatch(firestore);
           items.slice(i, i + 400).forEach(function(it){ b.set(fsM.doc(firestore, it[0], it[1]), it[2]); });
-          await b.commit();
+          await trackWrite(b.commit());
         }
         return items.length;
       }
@@ -221,13 +263,24 @@
       async function ensureSeed(){
         var flag = fsM.doc(firestore, 'meta', 'seeded');
         var snap = await fsM.getDoc(flag);
-        if (snap.exists()) return;
-        var shows = (window.GSC_SEED || {}).shows || {};
-        var ids = Object.keys(shows);
-        var b = fsM.writeBatch(firestore);
-        ids.forEach(function(id){ b.set(fsM.doc(firestore, 'shows', id), shows[id]); });
-        b.set(flag, { at: Date.now() });
-        await b.commit();
+        if (!snap.exists()){
+          var shows = (window.GSC_SEED || {}).shows || {};
+          var b = fsM.writeBatch(firestore);
+          Object.keys(shows).forEach(function(id){ b.set(fsM.doc(firestore, 'shows', id), shows[id]); });
+          b.set(flag, { at: Date.now() });
+          await b.commit();
+        }
+        // later additions (e.g. Clark County 2026), loaded once each
+        var extras = (window.GSC_SEED || {}).extras || [];
+        for (var i = 0; i < extras.length; i++){
+          var ex = extras[i], f = fsM.doc(firestore, 'meta', 'seed-' + ex.flag);
+          var sn = await fsM.getDoc(f);
+          if (sn.exists()) continue;
+          var eb = fsM.writeBatch(firestore);
+          Object.keys(ex.shows).forEach(function(id){ eb.set(fsM.doc(firestore, 'shows', id), ex.shows[id]); });
+          eb.set(f, { at: Date.now() });
+          await eb.commit();
+        }
       }
 
       function doSignIn(){
@@ -275,8 +328,9 @@
         if (legacy && legacy.shows && Object.keys(legacy.shows).length){
           footer.migrate = function(){ return restore(legacy).then(function(n){ try { localStorage.removeItem(LOCAL_KEY); } catch (e){} return n; }); };
         }
+        renderPill();
         buildFooter(footer);
-        function refresh(){ if (footer.onStatus) footer.onStatus(''); var m = document.getElementById('localMsg'); if (m && /^(Synced|Offline)/.test(m.textContent)) m.textContent = footer.baseMsg(); }
+        function refresh(){ renderPill(); if (footer.onStatus) footer.onStatus(''); var m = document.getElementById('localMsg'); if (m && /^(Synced|Offline)/.test(m.textContent)) m.textContent = footer.baseMsg(); }
         window.addEventListener('online', refresh);
         window.addEventListener('offline', refresh);
       });
