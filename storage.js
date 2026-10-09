@@ -186,7 +186,7 @@
       baseMsg: function(){ return 'Your data is saved in this browser only (cloud sync is not set up yet). Back it up now and then.'; },
       backup: function(){ return clone(data); },
       restore: function(obj){
-        data = { shows: obj.shows, series: obj.series || {} };
+        data = { shows: obj.shows, series: obj.series || {}, layouts: obj.layouts || {}, seeded: data.seeded || {} };
         save(); notify();
         return Object.keys(data.shows).length + Object.keys(data.series).length;
       }
@@ -246,7 +246,7 @@
       } };
 
       async function backup(){
-        var out = { shows: {}, series: {} };
+        var out = { shows: {}, series: {}, layouts: {} };
         for (var c in out){
           var s = await fsM.getDocs(fsM.collection(firestore, c));
           s.forEach(function(d){ out[c][d.id] = d.data(); });
@@ -255,7 +255,7 @@
       }
       async function restore(obj){
         var items = [];
-        ['shows', 'series'].forEach(function(c){ Object.keys(obj[c] || {}).forEach(function(id){ items.push([c, id, obj[c][id]]); }); });
+        ['shows', 'series', 'layouts'].forEach(function(c){ Object.keys(obj[c] || {}).forEach(function(id){ items.push([c, id, obj[c][id]]); }); });
         for (var i = 0; i < items.length; i += 400){
           var b = fsM.writeBatch(firestore);
           items.slice(i, i + 400).forEach(function(it){ b.set(fsM.doc(firestore, it[0], it[1]), it[2]); });

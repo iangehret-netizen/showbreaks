@@ -89,6 +89,10 @@ th.rowlabelhead{position:sticky; left:0; z-index:4; text-align:left; background:
 td.rowlabel{position:sticky; left:0; background:var(--surface); z-index:1; font-size:.84rem; padding:7px 10px; border-bottom:1px solid var(--line); white-space:nowrap;}
 th.showhead{min-width:112px; max-width:130px; text-align:center;}
 th.avghead{position:sticky; right:0; z-index:4; background:var(--gold-soft); color:var(--on-dark); min-width:118px; text-align:center;}
+th.avghead.lblhead{right:var(--avgw,124px); z-index:4;}
+td.avgcell.lblcell{right:var(--avgw,124px); text-align:left; font-size:.84rem; font-weight:600; padding:7px 10px; white-space:nowrap;}
+table.custom td.lblcell{overflow:hidden; text-overflow:ellipsis;}
+@media (max-width:700px){ th.avghead.lblhead, td.avgcell.lblcell{position:static;} }
 td.avgcell{position:sticky; right:0; background:var(--gold-soft); color:var(--on-dark); z-index:1; text-align:center; border-bottom:1px solid var(--line); border-left:1px solid var(--line);}
 td.datacell{text-align:center; padding:6px 6px; border-bottom:1px solid var(--line); font-size:.86rem;}
 .showname{font-family:'Oswald',sans-serif; font-size:.82rem; letter-spacing:.02em;}
@@ -178,6 +182,11 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
   .classrow{grid-template-columns:1fr 56px 56px 60px; gap:5px;}
   .colheads{grid-template-columns:1fr 56px 56px 60px; gap:5px;}
 }
+.lyrow{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 28px 28px 28px; gap:6px; align-items:center; padding:6px 0; border-top:1px solid var(--line);}
+.lyrow input{width:100%; padding:7px 8px; border-radius:6px; border:1px solid var(--line); background:var(--surface-2); color:var(--on-dark); font:inherit; font-size:.85rem;}
+.lyheads{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 94px; gap:6px; font-size:.64rem; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); padding:2px 0;}
+.lyrow .iconbtn:disabled{opacity:.3}
+.lyrow .iconbtn.rm{color:#b33; border-color:#b33}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
 
@@ -203,6 +212,7 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     <span class="hint" id="statusHint">Loading shows&hellip;</span>
     <div class="toolbar-actions">
       <button class="btn ghost" id="resetWidthsBtn" hidden title="Put every column back to its default width">Reset widths</button>
+      <button class="btn ghost" id="editClassesBtn" hidden title="Rename, add, remove or reorder the classes on this tab">Edit Classes</button>
       <button class="btn ghost" id="editSeriesBtn" hidden title="Rename this tab, change its class layouts, or delete it">Edit Tab</button>
       <span class="exportgroup" id="exportGroup" hidden>
         <button class="btn ghost" id="exportXlsxBtn" title="Workbook with one sheet per tab in this show series">Export Excel</button>
@@ -284,6 +294,35 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
       <div style="display:flex; gap:10px; margin-left:auto;">
         <button class="btn subtle" id="cancelSeries">Cancel</button>
         <button class="btn" id="saveSeriesBtn">Save Tab</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="layoutScrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="layoutTitle" style="max-width:560px;">
+    <div class="modal-head">
+      <h2 id="layoutTitle">Edit Classes</h2>
+      <button class="iconbtn" id="closeLayout" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="layoutLabel">Tab name</label>
+        <input id="layoutLabel" type="text" maxlength="40">
+      </div>
+      <div class="field">
+        <label>Classes (top to bottom)</label>
+        <div class="lyheads"><span>Division / group</span><span>Class name</span><span></span></div>
+        <div id="layoutRows"></div>
+        <button class="btn subtle" id="addLayoutRow" style="margin-top:10px;">+ Add Class</button>
+        <p class="fieldnote">Weigh breaks you already entered stay with their row, so renaming "Class 7" keeps its numbers. Removing a row hides its numbers; adding it back later starts it empty. Changes apply on every device.</p>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger" id="resetLayoutBtn" hidden>Reset to Original</button>
+      <div style="display:flex; gap:10px; margin-left:auto;">
+        <button class="btn subtle" id="cancelLayout">Cancel</button>
+        <button class="btn" id="saveLayoutBtn">Save Classes</button>
       </div>
     </div>
   </div>
@@ -385,6 +424,20 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     clarkjr: { label: 'Junior Show', rows: CLARK_JR_ROWS }
   };
 
+  // Built-in class lists stay as the fallback; edits saved in the 'layouts' collection override them.
+  var DEFAULT_TEMPLATES = {};
+  Object.keys(TEMPLATES).forEach(function(k){ DEFAULT_TEMPLATES[k] = { label: TEMPLATES[k].label, rows: TEMPLATES[k].rows.slice() }; });
+  var layoutOverrides = {};
+  function applyLayouts(){
+    Object.keys(DEFAULT_TEMPLATES).forEach(function(k){
+      var o = layoutOverrides[k], d = DEFAULT_TEMPLATES[k];
+      TEMPLATES[k] = {
+        label: (o && o.label) || d.label,
+        rows: (o && Array.isArray(o.rows) && o.rows.length) ? o.rows.filter(function(r){ return r && r.k; }).map(function(r){ return { k: String(r.k), l: String(r.l || ''), b: String(r.b || '') }; }) : d.rows
+      };
+    });
+  }
+
   var BUILTIN_SERIES = {
     naile: { label: 'NAILE', templates: ['purebred','commercial'], builtin: true },
     osf: { label: 'Ohio State Fair', templates: ['osfewe','osfjrmarket','osfopenmarket'], builtin: true },
@@ -481,13 +534,14 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
       table.classList.remove('custom');
       table.style.width = ''; table.style.minWidth = '';
       if (resetBtn) resetBtn.hidden = true;
+      syncAvgOffset();
       return;
     }
     var w = curWidths(), total = 0;
     var cg = document.createElement('colgroup');
     table.querySelectorAll('thead th').forEach(function(th){
       var id = th.dataset.col;
-      var px = w[id] || (id === 'class' ? DEFAULT_W.class : id === 'avg' ? DEFAULT_W.avg : DEFAULT_W.show);
+      var px = w[id] || (id === 'class' || id === 'lbl' ? DEFAULT_W.class : id === 'avg' ? DEFAULT_W.avg : DEFAULT_W.show);
       var col = document.createElement('col');
       col.style.width = px + 'px';
       cg.appendChild(col);
@@ -498,7 +552,15 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     table.style.width = total + 'px';
     table.style.minWidth = total + 'px';
     if (resetBtn) resetBtn.hidden = false;
+    syncAvgOffset();
   }
+
+  function syncAvgOffset(){
+    var table = document.getElementById('mainTable');
+    var th = table && table.querySelector('th.avghead:not(.lblhead)');
+    if (th) table.style.setProperty('--avgw', Math.round(th.getBoundingClientRect().width) + 'px');
+  }
+  window.addEventListener('resize', syncAvgOffset);
 
   function addGrip(th, dir){
     var grip = document.createElement('span');
@@ -606,6 +668,13 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
       headRow.appendChild(th);
     });
 
+    var thLbl = document.createElement('th');
+    thLbl.className = 'avghead lblhead';
+    thLbl.innerHTML = '<span class="showname" style="color:var(--gold-ink)">Class</span>';
+    thLbl.dataset.col = 'lbl';
+    addGrip(thLbl, -1);
+    headRow.appendChild(thLbl);
+
     var thAvg = document.createElement('th');
     thAvg.className = 'avghead';
     thAvg.innerHTML = '<span class="showname" style="color:var(--gold-ink)">Average</span>';
@@ -616,6 +685,7 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     thead.innerHTML = '';
     thead.appendChild(headRow);
     applyColWidths();
+    requestAnimationFrame(syncAvgOffset);
 
     // body
     tbody.innerHTML = '';
@@ -634,6 +704,10 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
             td.innerHTML = '<span class="empty-dash">&middot;&middot;&middot;</span>';
             tr.appendChild(td);
           }
+          var tdLbl0 = document.createElement('td');
+          tdLbl0.className = 'avgcell lblcell';
+          tdLbl0.textContent = r.l;
+          tr.appendChild(tdLbl0);
           var tdAvg = document.createElement('td');
           tdAvg.className = 'avgcell';
           tdAvg.innerHTML = '<span class="empty-dash">&middot;&middot;&middot;</span>';
@@ -669,6 +743,12 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
           tr.appendChild(td);
         });
 
+        var tdLbl = document.createElement('td');
+        tdLbl.className = 'avgcell lblcell';
+        tdLbl.textContent = r.l;
+        tdLbl.title = r.b + ' · ' + r.l;
+        tr.appendChild(tdLbl);
+
         var tdAvg = document.createElement('td');
         tdAvg.className = 'avgcell';
         if (mins.length){
@@ -689,7 +769,7 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     var tr = document.createElement('tr');
     tr.className = 'breedrow';
     var td = document.createElement('td');
-    td.colSpan = showCount + 2;
+    td.colSpan = showCount + 3;
     td.textContent = breed;
     td.style.borderLeft = '3px solid ' + (BREED_COLORS[breed] || 'var(--line)');
     tr.appendChild(td);
@@ -857,6 +937,7 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     if (dbAvailable) html += '<button class="tab addtab" data-action="add" title="Add a new show tab">+ Add Tab</button>';
     el.innerHTML = html;
     document.getElementById('editSeriesBtn').hidden = !(SERIES[state.series] && !SERIES[state.series].builtin);
+    document.getElementById('editClassesBtn').hidden = !dbAvailable;
   }
 
   // ---------- add / edit / delete a tab (show series) ----------
@@ -944,6 +1025,103 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     }
   }
 
+  // ---------- edit classes (per sub-tab layout) ----------
+  var layoutDraft = null, layoutResetArmed = false;
+  function newRowKey(){ return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  function openLayoutModal(){
+    var tpl = TEMPLATES[state.template];
+    layoutDraft = tpl.rows.map(function(r){ return { k: r.k, l: r.l, b: r.b }; });
+    layoutResetArmed = false;
+    document.getElementById('layoutTitle').textContent = 'Edit Classes: ' + SERIES[state.series].label;
+    document.getElementById('layoutLabel').value = tpl.label;
+    var rb = document.getElementById('resetLayoutBtn');
+    rb.hidden = !layoutOverrides[state.template]; rb.textContent = 'Reset to Original';
+    renderLayoutRows();
+    document.getElementById('layoutScrim').hidden = false;
+  }
+  function closeLayoutModal(){ document.getElementById('layoutScrim').hidden = true; layoutDraft = null; }
+
+  function readLayoutInputs(){
+    if (!layoutDraft) return;
+    document.querySelectorAll('#layoutRows .lyrow').forEach(function(row, i){
+      layoutDraft[i].b = row.querySelector('.lyb').value;
+      layoutDraft[i].l = row.querySelector('.lyl').value;
+    });
+  }
+
+  function renderLayoutRows(){
+    var box = document.getElementById('layoutRows');
+    box.innerHTML = '';
+    layoutDraft.forEach(function(r, i){
+      var row = document.createElement('div');
+      row.className = 'lyrow';
+      row.innerHTML =
+        '<input class="lyb" type="text" maxlength="40" placeholder="Division" aria-label="Division">' +
+        '<input class="lyl" type="text" maxlength="40" placeholder="Class name" aria-label="Class name">' +
+        '<button class="iconbtn" data-act="up" title="Move up" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>&#9650;</button>' +
+        '<button class="iconbtn" data-act="down" title="Move down" aria-label="Move down"' + (i === layoutDraft.length - 1 ? ' disabled' : '') + '>&#9660;</button>' +
+        '<button class="iconbtn rm" data-act="rm" title="Remove class" aria-label="Remove class">&#10005;</button>';
+      row.querySelector('.lyb').value = r.b;
+      row.querySelector('.lyl').value = r.l;
+      row.dataset.i = i;
+      box.appendChild(row);
+    });
+  }
+
+  function addLayoutRow(){
+    readLayoutInputs();
+    var last = layoutDraft[layoutDraft.length - 1];
+    var label = '';
+    if (last){
+      var m = /^(.*?)(\d+)\s*$/.exec(last.l);
+      if (m) label = m[1] + (parseInt(m[2], 10) + 1);
+    }
+    layoutDraft.push({ k: newRowKey(), l: label, b: last ? last.b : '' });
+    renderLayoutRows();
+    var rows = document.querySelectorAll('#layoutRows .lyl');
+    if (rows.length) rows[rows.length - 1].focus();
+  }
+
+  async function saveLayout(){
+    readLayoutInputs();
+    var rows = layoutDraft.map(function(r){ return { k: r.k, l: r.l.trim(), b: r.b.trim() || 'Classes' }; })
+      .filter(function(r){ return r.l; });
+    if (!rows.length){ showToast('Keep at least one class.'); return; }
+    var label = document.getElementById('layoutLabel').value.trim() || DEFAULT_TEMPLATES[state.template].label;
+    if (!dbAvailable){ showToast('Storage isn’t available in this view.'); return; }
+    var btn = document.getElementById('saveLayoutBtn');
+    btn.disabled = true;
+    try {
+      await db.collection('layouts').doc(state.template).set({ label: label, rows: rows, updated: Date.now() });
+      layoutOverrides[state.template] = { label: label, rows: rows };
+      applyLayouts(); renderTemplateTabs(); renderTable();
+      showToast('Classes saved.');
+      closeLayoutModal();
+    } catch (err){
+      showToast('Couldn’t save: ' + (err && err.message ? err.message : 'try again'));
+    } finally { btn.disabled = false; }
+  }
+
+  async function resetLayout(){
+    var btn = document.getElementById('resetLayoutBtn');
+    if (!layoutResetArmed){
+      layoutResetArmed = true; btn.textContent = 'Tap again to reset';
+      setTimeout(function(){ if (layoutResetArmed){ layoutResetArmed = false; btn.textContent = 'Reset to Original'; } }, 4000);
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await db.collection('layouts').doc(state.template).delete();
+      delete layoutOverrides[state.template];
+      applyLayouts(); renderTemplateTabs(); renderTable();
+      showToast('Classes reset to the original list.');
+      closeLayoutModal();
+    } catch (err){
+      showToast('Couldn’t reset: ' + (err && err.message ? err.message : 'try again'));
+    } finally { btn.disabled = false; }
+  }
+
   // ---------- export (Excel / PDF) ----------
   var dl = null;
   var EXCELJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
@@ -1015,7 +1193,7 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
 
       models.forEach(function(m){
         var ws = wb.addWorksheet(m.tpl.label.replace(/[\\\/\?\*\[\]:]/g, '-').slice(0, 31));
-        var ncol = m.shows.length + 2;
+        var ncol = m.shows.length + 3;
 
         ws.mergeCells(1, 1, 1, ncol);
         var title = ws.getCell(1, 1);
@@ -1034,9 +1212,9 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
             cell.border = border;
           }
         }
-        headerRow(3, 'Class', m.shows.map(showYearLabel).concat(['Average']));
-        headerRow(4, 'Judge', m.shows.map(function(s){ return s.judge || ''; }).concat(['']));
-        headerRow(5, 'Date', m.shows.map(function(s){ return fmtDate(s.date); }).concat(['']));
+        headerRow(3, 'Class', m.shows.map(showYearLabel).concat(['Class', 'Average']));
+        headerRow(4, 'Judge', m.shows.map(function(s){ return s.judge || ''; }).concat(['', '']));
+        headerRow(5, 'Date', m.shows.map(function(s){ return fmtDate(s.date); }).concat(['', '']));
         ws.getRow(4).height = 30;
 
         var r = 6;
@@ -1052,6 +1230,8 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
             var xr = ws.getRow(r);
             xr.getCell(1).value = row.label;
             row.cells.forEach(function(t, i){ xr.getCell(i + 2).value = t || ''; });
+            var lc = xr.getCell(ncol - 1);
+            lc.value = row.label;
             var ac = xr.getCell(ncol);
             ac.value = row.avg ? row.avg.text : '';
             for (var c = 1; c <= ncol; c++){
@@ -1061,12 +1241,16 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
             }
             ac.font = { bold: true, color: { argb: WHITE } };
             ac.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DARK } };
+            lc.font = { bold: true, color: { argb: WHITE } };
+            lc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DARK } };
+            lc.alignment = { horizontal: 'left', vertical: 'middle' };
             r++;
           });
         });
 
         ws.getColumn(1).width = 24;
         for (var c = 2; c <= ncol; c++) ws.getColumn(c).width = 17;
+        ws.getColumn(ncol - 1).width = 24;
         ws.views = [{ state: 'frozen', xSplit: 1, ySplit: 5 }];
         ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
       });
@@ -1092,7 +1276,7 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
       await loadScript(AUTOTABLE_URL);
       var doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
       var series = SERIES[state.series];
-      var ncol = m.shows.length + 2;
+      var ncol = m.shows.length + 3;
 
       doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
       doc.text(series.label + ' - ' + m.tpl.label, 36, 38);
@@ -1103,18 +1287,19 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
 
       var head = [['Class'].concat(m.shows.map(function(s){
         return showYearLabel(s) + (s.judge ? '\n' + s.judge : '');
-      })).concat(['Average'])];
+      })).concat(['Class', 'Average'])];
 
       var body = [];
       m.groups.forEach(function(g){
         body.push([{ content: g.breed, colSpan: ncol, styles: { fillColor: [201, 201, 201], textColor: [10, 10, 10], fontStyle: 'bold', halign: 'left' } }]);
         g.rows.forEach(function(row){
-          body.push([row.label].concat(row.cells).concat([row.avg ? row.avg.text : '']));
+          body.push([row.label].concat(row.cells).concat([row.label, row.avg ? row.avg.text : '']));
         });
       });
 
       var colStyles = {};
       colStyles[0] = { halign: 'left', fontStyle: 'bold', cellWidth: 82 };
+      colStyles[ncol - 2] = { halign: 'left', fontStyle: 'bold', cellWidth: 82, fillColor: [28, 28, 28], textColor: [255, 255, 255] };
       colStyles[ncol - 1] = { halign: 'center', fontStyle: 'bold', fillColor: [28, 28, 28], textColor: [255, 255, 255] };
 
       doc.autoTable({
@@ -1154,6 +1339,23 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     persistWidths();
     applyColWidths();
   });
+  document.getElementById('editClassesBtn').addEventListener('click', openLayoutModal);
+  document.getElementById('closeLayout').addEventListener('click', closeLayoutModal);
+  document.getElementById('cancelLayout').addEventListener('click', closeLayoutModal);
+  document.getElementById('saveLayoutBtn').addEventListener('click', saveLayout);
+  document.getElementById('resetLayoutBtn').addEventListener('click', resetLayout);
+  document.getElementById('addLayoutRow').addEventListener('click', addLayoutRow);
+  document.getElementById('layoutScrim').addEventListener('click', function(e){ if (e.target.id === 'layoutScrim') closeLayoutModal(); });
+  document.getElementById('layoutRows').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-act]');
+    if (!b) return;
+    readLayoutInputs();
+    var i = parseInt(b.closest('.lyrow').dataset.i, 10), act = b.dataset.act, t;
+    if (act === 'up' && i > 0){ t = layoutDraft[i - 1]; layoutDraft[i - 1] = layoutDraft[i]; layoutDraft[i] = t; }
+    else if (act === 'down' && i < layoutDraft.length - 1){ t = layoutDraft[i + 1]; layoutDraft[i + 1] = layoutDraft[i]; layoutDraft[i] = t; }
+    else if (act === 'rm') layoutDraft.splice(i, 1);
+    renderLayoutRows();
+  });
   document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
   document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
   document.getElementById('seriesTabs').addEventListener('click', function(e){
@@ -1188,7 +1390,8 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
   });
   document.addEventListener('keydown', function(e){
     if (e.key !== 'Escape') return;
-    if (!document.getElementById('seriesScrim').hidden) closeSeriesModal();
+    if (!document.getElementById('layoutScrim').hidden) closeLayoutModal();
+    else if (!document.getElementById('seriesScrim').hidden) closeSeriesModal();
     else if (!document.getElementById('scrim').hidden) closeModal();
   });
 
@@ -1211,6 +1414,12 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
       if (!db){ dbAvailable = false; renderTable(); return; }
       dbAvailable = true;
       renderSeriesTabs();
+      db.collection('layouts').onSnapshot(function(snap){
+        layoutOverrides = {};
+        snap.docs.forEach(function(d){ if (DEFAULT_TEMPLATES[d.id]) layoutOverrides[d.id] = d.data() || {}; });
+        applyLayouts();
+        renderTemplateTabs(); renderTable();
+      }, function(){});
       db.collection('series').onSnapshot(function(snap){
         customSeries = snap.docs.map(function(d){
           var data = d.data() || {};
