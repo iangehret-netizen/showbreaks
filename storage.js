@@ -1,5 +1,5 @@
 /* Data layer. Two modes, chosen automatically:
-   - Cloud (Firebase): used when firebase-config.js has a real config. Google sign-in, shows sync
+   - Cloud (Firebase): used when firebase-config.js has a real config. passcode unlock, shows sync
      across every device, and changes made offline sync when you reconnect.
    - Local: used while firebase-config.js still has the PASTE_ placeholders. Data stays in this browser.
    Either way it exposes window.claude.use('db' | 'downloads'), which the app already uses. */
@@ -9,6 +9,8 @@
   var FB_VERSION = '10.14.1';
   var LOCAL_KEY = 'gsc-weigh-breaks-v1';
   var cfg = window.FIREBASE_CONFIG || {};
+  // Hidden shared account behind the passcode. The passcode is this account's password.
+  var SYNC_EMAIL = cfg.syncEmail || 'sync@weighbreaks.app';
   var useCloud = !!(cfg.apiKey && cfg.projectId && String(cfg.apiKey).indexOf('PASTE') < 0 && String(cfg.projectId).indexOf('PASTE') < 0);
 
   function clone(o){ return JSON.parse(JSON.stringify(o)); }
@@ -89,7 +91,7 @@
         (opts.migrate ? '<button class="btn ghost" id="migrateBtn">Upload this browser’s old data</button>' : '') +
         '<button class="btn ghost" id="backupBtn">Backup data</button>' +
         '<button class="btn ghost" id="restoreBtn">Restore backup</button>' +
-        (opts.signOut ? '<button class="btn ghost" id="signOutBtn">Sign out</button>' : '') +
+        (opts.signOut ? '<button class="btn ghost" id="signOutBtn">Lock this device</button>' : '') +
         '<input type="file" id="restoreFile" accept="application/json,.json" hidden>';
       wrap.appendChild(f);
       var msg = document.getElementById('localMsg');
@@ -199,14 +201,17 @@
     window.claude = { use: function(name){ return name === 'db' ? ready : Promise.resolve(name === 'downloads' ? downloads : null); } };
 
     var gateEl = null;
-    function showGate(title, text, btnLabel, onClick){
+    function showGate(title, text, btnLabel, onClick, withInput){
       if (!gateEl){ gateEl = document.createElement('div'); gateEl.className = 'gscgate'; document.body.appendChild(gateEl); }
       gateEl.hidden = false;
       gateEl.innerHTML = '<div class="gscgate-card"><div class="eyebrow">Gehret Sheep Co · Weigh Breaks</div><h2></h2><p></p>' +
+        (withInput ? '<input id="gatePass" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" placeholder="Passcode" style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;text-align:center;border:1px solid #bbb;border-radius:8px;margin:0 0 12px">' : '') +
         (btnLabel ? '<button class="btn" id="gateBtn"></button>' : '') + '<div class="gatemsg" id="gateMsg"></div></div>';
       gateEl.querySelector('h2').textContent = title;
       gateEl.querySelector('p').textContent = text;
       if (btnLabel){ var b = gateEl.querySelector('#gateBtn'); b.textContent = btnLabel; b.addEventListener('click', onClick); }
+      var pi = gateEl.querySelector('#gatePass');
+      if (pi){ pi.addEventListener('keydown', function(e){ if (e.key === 'Enter') onClick(); }); setTimeout(function(){ pi.focus(); }, 50); }
     }
     function gateMsg(t){ var m = document.getElementById('gateMsg'); if (m) m.textContent = t; }
     function hideGate(){ if (gateEl) gateEl.hidden = true; }
@@ -284,16 +289,19 @@
       }
 
       function doSignIn(){
-        gateMsg('');
-        var provider = new authM.GoogleAuthProvider();
-        authM.signInWithPopup(auth, provider).catch(function(err){
-          var code = err && err.code;
-          if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment'){
-            return authM.signInWithRedirect(auth, provider);
-          }
-          if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request'){ gateMsg('Sign-in was cancelled.'); return; }
-          if (code === 'auth/unauthorized-domain'){ gateMsg('This site’s address isn’t in Firebase > Authentication > Settings > Authorized domains yet.'); return; }
-          gateMsg('Couldn’t sign in' + (code ? ' (' + code + ')' : '') + '.');
+        var pi = document.getElementById('gatePass');
+        var code = pi ? pi.value : '';
+        if (!code){ gateMsg('Enter the passcode.'); return; }
+        gateMsg('Checking…');
+        var b = document.getElementById('gateBtn'); if (b) b.disabled = true;
+        authM.signInWithEmailAndPassword(auth, SYNC_EMAIL, code).catch(function(err){
+          if (b) b.disabled = false;
+          var c = err && err.code;
+          if (c === 'auth/network-request-failed') gateMsg('No internet. Connect once to unlock this device; after that it stays unlocked.');
+          else if (c === 'auth/too-many-requests') gateMsg('Too many tries. Wait a minute and try again.');
+          else if (c === 'auth/operation-not-allowed') gateMsg('Passcode sign-in isn’t turned on in Firebase yet (Authentication > Sign-in method > Email/Password).');
+          else gateMsg('Incorrect passcode. Try again.');
+          if (pi){ pi.value = ''; pi.focus(); }
         });
       }
       function doSignOut(){ authM.signOut(auth).then(function(){ location.reload(); }); }
@@ -302,7 +310,7 @@
       authM.onAuthStateChanged(auth, async function(user){
         if (!user){
           if (started){ location.reload(); return; }
-          showGate('Sign in to sync', 'Sign in with the Google account approved for this app. Your shows then stay in sync on every device.', 'Sign in with Google', doSignIn);
+          showGate('Enter passcode', 'Enter the passcode to unlock this device. You only need it once per device; your shows then stay in sync everywhere.', 'Unlock', doSignIn, true);
           return;
         }
         if (started) return;
@@ -310,7 +318,7 @@
         try { await ensureSeed(); }
         catch (err){
           if (err && err.code === 'permission-denied'){
-            showGate('Not allowed', user.email + ' isn’t on this app’s approved list. Sign in with a different Google account, or add this one to the Firestore rules.', 'Sign out', doSignOut);
+            showGate('Not allowed', 'The passcode worked, but the Firestore rules are blocking access. Update the rules in Firebase (see README), then reload.', 'Lock & retry', doSignOut);
             return;
           }
           // offline or a temporary error: carry on, the app works from the local cache
@@ -320,7 +328,7 @@
         resolveDb(db);
 
         var footer = {
-          baseMsg: function(){ return (navigator.onLine ? 'Synced to the cloud' : 'Offline: changes will sync when you reconnect') + ' as ' + user.email + '.'; },
+          baseMsg: function(){ return (navigator.onLine ? 'Synced to the cloud' : 'Offline: changes will sync when you reconnect') + '.'; },
           backup: backup, restore: restore, signOut: doSignOut
         };
         var legacy = null;

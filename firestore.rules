@@ -2,14 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Only the Google accounts listed here can read or write anything.
+    // Only the hidden passcode account can read or write.
+    // (Its email is set by syncEmail in firebase-config.js; default sync@weighbreaks.app)
     function allowed() {
       return request.auth != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.email in [
-          'YOUR_EMAIL@gmail.com'
-          // , 'family.member@gmail.com'
-        ];
+        && request.auth.token.email == 'sync@weighbreaks.app';
     }
 
     match /{document=**} {
