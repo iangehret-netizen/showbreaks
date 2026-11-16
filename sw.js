@@ -1,7 +1,7 @@
 // Weigh-Break Recorder: lets the site open with no signal at the fairgrounds.
 // Your own files: network first (so updates show right away), cache as backup.
 // Firebase and font files: cache first (they never change for a given version).
-const CACHE_NAME = "wbr-v2";
+const CACHE_NAME = "wbr-v3";
 const CORE = ["./", "./index.html", "./storage.js", "./firebase-config.js", "./seed.js", "./manifest.json", "./apple-touch-icon.png", "./icon-192.png", "./icon-512.png", "./favicon-32.png"];
 
 self.addEventListener("install", (e) => {

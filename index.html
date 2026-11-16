@@ -195,6 +195,12 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
 .lyheads{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 94px; gap:6px; font-size:.64rem; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); padding:2px 0;}
 .lyrow .iconbtn:disabled{opacity:.3}
 .lyrow .iconbtn.rm{color:#b33; border-color:#b33}
+.classrow .xlabel{display:flex; gap:6px; align-items:center; min-width:0}
+.classrow .xlabel input{flex:1; min-width:0; padding:5px 7px; border-radius:6px; border:1px dashed var(--line); background:transparent; color:inherit; font:inherit; font-size:.85rem}
+.classrow .xrm{background:none; border:0; color:#b33; font-size:1rem; padding:0 2px; cursor:pointer}
+.addcls{margin:6px 12px 10px; padding:6px 12px; font-size:.75rem}
+.newgroup{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap}
+.newgroup input{flex:1 1 180px; padding:9px 10px; border-radius:8px; border:1px solid var(--line); background:var(--surface-2); color:var(--on-dark); font:inherit}
 .embed .topbar > div:first-child{display:none}
 .embed .wrap{padding-top:10px}
 .viewtoggle{display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden}
@@ -512,6 +518,25 @@ td.datacell.hit{background:var(--gold-tint)}
     'Black Face Cross': '#b99a2e', 'White Face Cross': '#a9792a'
   };
 
+  // One-off classes added while entering a single show live on that show (extraRows).
+  function mergeRows(base, extras){
+    var out = base.slice(), seen = {};
+    out.forEach(function(r){ seen[r.k] = 1; });
+    (extras || []).forEach(function(x){
+      if (!x || !x.k || seen[x.k]) return; seen[x.k] = 1;
+      var at = -1;
+      for (var i = out.length - 1; i >= 0; i--) if (out[i].b === x.b){ at = i; break; }
+      var r = { k: x.k, l: x.l || 'Class', b: x.b || 'Classes', extra: true };
+      if (at < 0) out.push(r); else out.splice(at + 1, 0, r);
+    });
+    return out;
+  }
+  function rowsFor(key, shows){
+    var ex = [];
+    (shows || []).forEach(function(s){ (s.extraRows || []).forEach(function(x){ ex.push(x); }); });
+    return mergeRows(TEMPLATES[key].rows, ex);
+  }
+
   function groupByBreed(rows){
     var groups = [], map = {};
     rows.forEach(function(r){
@@ -679,7 +704,7 @@ td.datacell.hit{background:var(--gold-tint)}
     var tpl = TEMPLATES[state.template];
     var shows = (state.shows[state.template] || []).filter(function(s){ return s.series === state.series; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
     var w = lookupW(), fits = {}, summary = [];
-    if (state.loaded[state.template]) groupByBreed(tpl.rows).forEach(function(g){
+    if (state.loaded[state.template]) groupByBreed(rowsFor(state.template, shows)).forEach(function(g){
       var stats = g.rows.map(function(r){ return { r: r, st: classStats(shows, r) }; }).filter(function(x){ return x.st.n; });
       if (w == null || !stats.length) return;
       var hit = stats.filter(function(x){ return w >= x.st.min && w <= x.st.max; })[0];
@@ -709,7 +734,7 @@ td.datacell.hit{background:var(--gold-tint)}
     // cards
     if (cardsOn && !empty){
       cv.innerHTML = '';
-      groupByBreed(tpl.rows).forEach(function(g){
+      groupByBreed(rowsFor(state.template, shows)).forEach(function(g){
         var sec = document.createElement('div'); sec.className = 'cardgroup';
         sec.innerHTML = '<h3 style="border-left:3px solid ' + (BREED_COLORS[g.breed] || 'var(--line)') + '">' + escapeHtml(g.breed) + '</h3>';
         var grid = document.createElement('div'); grid.className = 'cardgrid';
@@ -741,7 +766,7 @@ td.datacell.hit{background:var(--gold-tint)}
     SERIES_ORDER.forEach(function(id){ out.series[id] = { label: SERIES[id].label, templates: SERIES[id].templates.slice() }; });
     ALL_TEMPLATE_KEYS.forEach(function(k){
       out.templates[k] = { label: TEMPLATES[k].label, rows: TEMPLATES[k].rows.map(function(r){ return { k: r.k, l: r.l, b: r.b }; }) };
-      (state.shows[k] || []).forEach(function(s){ out.shows.push({ id: s.id, name: s.name, date: s.date, series: s.series, template: k, entries: s.entries }); });
+      (state.shows[k] || []).forEach(function(s){ out.shows.push({ id: s.id, name: s.name, date: s.date, series: s.series, template: k, entries: s.entries, extraRows: s.extraRows || [] }); });
     });
     try { localStorage.setItem('wb-cache-v1', JSON.stringify(out)); } catch (e){}
     try { if (window.parent && window.parent !== window) window.parent.dispatchEvent(new Event('gsc-wb')); } catch (e){}
@@ -857,7 +882,7 @@ td.datacell.hit{background:var(--gold-tint)}
       return;
     }
 
-    groupByBreed(tpl.rows).forEach(function(g){
+    groupByBreed(rowsFor(state.template, shows)).forEach(function(g){
       appendBreedRow(tbody, g.breed, shows.length);
       g.rows.forEach(function(r){
         var tr = document.createElement('tr');
@@ -924,16 +949,36 @@ td.datacell.hit{background:var(--gold-tint)}
   }
 
   // ---------- modal ----------
-  function buildClassGroups(templateKey, entries){
+  var formExtras = [];
+  function formRows(){ return mergeRows(TEMPLATES[state.template].rows, formExtras); }
+  function newKey(){ return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function nextLabel(rows){
+    var last = rows[rows.length - 1]; if (!last) return 'Class 1';
+    var m = /^(.*?)(\d+)\s*$/.exec(last.l);
+    return m ? m[1] + (parseInt(m[2], 10) + 1) : last.l + ' 2';
+  }
+  function snapshotForm(){
+    var out = {};
+    formRows().forEach(function(r){
+      var mn = document.getElementById('min_' + r.k); if (!mn) return;
+      out[r.k] = { min: mn.value, max: document.getElementById('max_' + r.k).value, note: document.getElementById('note_' + r.k).value, auto: mn.dataset.auto };
+    });
+    formExtras.forEach(function(x){ var li = document.getElementById('lab_' + x.k); if (li) x.l = li.value; });
+    var open = {};
+    document.querySelectorAll('#classGroups details').forEach(function(d){ if (d.open) open[d.dataset.b] = 1; });
+    return { vals: out, open: open };
+  }
+
+  function buildClassGroups(templateKey, entries, snap){
     var container = document.getElementById('classGroups');
     container.innerHTML = '';
-    var tpl = TEMPLATES[templateKey];
-    groupByBreed(tpl.rows).forEach(function(g, idx){
+    groupByBreed(formRows()).forEach(function(g, idx){
       var det = document.createElement('details');
       det.className = 'breedgroup';
-      if (idx === 0) det.open = true;
+      det.dataset.b = g.breed;
+      det.open = snap ? !!snap.open[g.breed] : idx === 0;
       var summary = document.createElement('summary');
-      summary.innerHTML = '<span>'+g.breed+' &middot; '+g.rows.length+' class'+(g.rows.length===1?'':'es')+'</span><span class="chev">&#9656;</span>';
+      summary.innerHTML = '<span>'+escapeHtml(g.breed)+' &middot; '+g.rows.length+' class'+(g.rows.length===1?'':'es')+'</span><span class="chev">&#9656;</span>';
       det.appendChild(summary);
 
       var heads = document.createElement('div');
@@ -944,23 +989,71 @@ td.datacell.hit{background:var(--gold-tint)}
       g.rows.forEach(function(r){
         var row = document.createElement('div');
         row.className = 'classrow';
-        var existing = entries && entries[r.k];
-        row.innerHTML =
-          '<label class="clabel" for="min_'+r.k+'">'+r.l+'</label>' +
-          '<input class="mono" type="number" inputmode="numeric" id="min_'+r.k+'" placeholder="min" value="'+(existing&&existing.min!=null?existing.min:'')+'">' +
-          '<input class="mono" type="number" inputmode="numeric" id="max_'+r.k+'" placeholder="max" value="'+(existing&&existing.max!=null?existing.max:'')+'">' +
-          '<input type="text" id="note_'+r.k+'" placeholder="&ndash;" maxlength="16" value="'+(existing&&existing.note?escapeHtml(existing.note):'')+'">';
+        var sv = snap && snap.vals[r.k];
+        var existing = sv ? { min: sv.min, max: sv.max, note: sv.note } : entries && entries[r.k];
+        function v(x){ return x != null ? escapeHtml(String(x)) : ''; }
+        var lab = r.extra
+          ? '<span class="xlabel"><input id="lab_'+r.k+'" type="text" maxlength="40" value="'+v(r.l)+'" aria-label="Class name"><button class="xrm" type="button" data-rm="'+r.k+'" title="Remove this class" aria-label="Remove this class">&#10005;</button></span>'
+          : '<label class="clabel" for="min_'+r.k+'">'+escapeHtml(r.l)+'</label>';
+        row.innerHTML = lab +
+          '<input class="mono" type="number" inputmode="numeric" id="min_'+r.k+'" placeholder="min" value="'+(existing?v(existing.min):'')+'">' +
+          '<input class="mono" type="number" inputmode="numeric" id="max_'+r.k+'" placeholder="max" value="'+(existing?v(existing.max):'')+'">' +
+          '<input type="text" id="note_'+r.k+'" placeholder="&ndash;" maxlength="16" value="'+(existing?v(existing.note):'')+'">';
+        if (sv && sv.auto === '1' && sv.min){ row.querySelector('#min_'+r.k).classList.add('auto'); }
         det.appendChild(row);
       });
+
+      var add = document.createElement('button');
+      add.type = 'button'; add.className = 'btn subtle addcls'; add.textContent = '+ Add Class';
+      add.title = 'Adds a class to this show only';
+      add.addEventListener('click', function(){
+        var sn = snapshotForm(); sn.open[g.breed] = 1;
+        var k = newKey();
+        formExtras.push({ k: k, l: nextLabel(g.rows), b: g.breed });
+        buildClassGroups(templateKey, entries, sn);
+        var mx = document.getElementById('min_' + k); if (mx) mx.focus();
+      });
+      det.appendChild(add);
       container.appendChild(det);
+
       var gRows = g.rows;
       gRows.forEach(function(r, i){
         var next = gRows[i + 1]; if (!next) return;
         var mx = det.querySelector('#max_' + r.k), nm = det.querySelector('#min_' + next.k);
-        if (!nm.value) nm.dataset.auto = '1';
+        var sv = snap && snap.vals[next.k];
+        nm.dataset.auto = sv ? (sv.auto === '1' || !sv.min ? '1' : '0') : (!nm.value ? '1' : '0');
         function sync(){ if (nm.dataset.auto !== '1') return; var v = parseFloat(mx.value); nm.value = isNaN(v) ? '' : String(v + 1); nm.classList.toggle('auto', !!nm.value); }
         mx.addEventListener('input', sync);
+        if (nm.dataset.auto === '1') sync();
         nm.addEventListener('input', function(){ nm.dataset.auto = nm.value ? '0' : '1'; nm.classList.remove('auto'); });
+      });
+    });
+
+    // add a whole new breed / division for this show
+    var ng = document.createElement('div');
+    ng.className = 'newgroup';
+    ng.innerHTML = '<input id="newGroupName" type="text" maxlength="40" placeholder="New breed or division (this show only)"><button class="btn subtle" type="button" id="newGroupBtn">+ Add Breed/Division</button>';
+    container.appendChild(ng);
+    function addGroup(){
+      var nameEl = document.getElementById('newGroupName');
+      var name = nameEl.value.trim();
+      if (!name){ nameEl.focus(); return; }
+      var sn = snapshotForm();
+      var exists = formRows().some(function(r){ return r.b.toLowerCase() === name.toLowerCase(); });
+      if (exists){ showToast('That breed/division is already here. Use its + Add Class.'); return; }
+      sn.open[name] = 1;
+      var k = newKey();
+      formExtras.push({ k: k, l: 'Class 1', b: name });
+      buildClassGroups(templateKey, entries, sn);
+      var f = document.getElementById('lab_' + k); if (f) f.focus();
+    }
+    document.getElementById('newGroupBtn').addEventListener('click', addGroup);
+    document.getElementById('newGroupName').addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); addGroup(); } });
+    container.querySelectorAll('[data-rm]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var sn = snapshotForm(), k = b.dataset.rm;
+        formExtras = formExtras.filter(function(x){ return x.k !== k; });
+        buildClassGroups(templateKey, entries, sn);
       });
     });
   }
@@ -972,6 +1065,7 @@ td.datacell.hit{background:var(--gold-tint)}
     document.getElementById('showDate').value = show ? show.date : '';
     document.getElementById('showJudge').value = show ? (show.judge||'') : '';
     document.getElementById('deleteShowBtn').hidden = !show;
+    formExtras = show && show.extraRows ? show.extraRows.map(function(x){ return { k: x.k, l: x.l, b: x.b }; }) : [];
     buildClassGroups(state.template, show ? show.entries : null);
     document.getElementById('ocrMsg').textContent = 'Tip: type only each class\u2019s top weight. The next class\u2019s bottom fills itself in (+1).';
     document.getElementById('scrim').hidden = false;
@@ -984,9 +1078,9 @@ td.datacell.hit{background:var(--gold-tint)}
   }
 
   function collectEntriesFromForm(){
-    var tpl = TEMPLATES[state.template];
     var entries = {};
-    tpl.rows.forEach(function(r){
+    formExtras.forEach(function(x){ var li = document.getElementById('lab_' + x.k); if (li) x.l = li.value.trim() || x.l; });
+    formRows().forEach(function(r){
       var minEl = document.getElementById('min_'+r.k);
       var maxEl = document.getElementById('max_'+r.k);
       var noteEl = document.getElementById('note_'+r.k);
@@ -1013,7 +1107,10 @@ td.datacell.hit{background:var(--gold-tint)}
     if (!name){ showToast('Give the show a name first.'); document.getElementById('showName').focus(); return; }
     if (!date){ showToast('Pick a date for the show.'); document.getElementById('showDate').focus(); return; }
 
-    var data = { name: name, date: date, judge: judge, template: state.template, series: state.series, entries: collectEntriesFromForm() };
+    var entries = collectEntriesFromForm();
+    var data = { name: name, date: date, judge: judge, template: state.template, series: state.series, entries: entries };
+    var extras = formExtras.filter(function(x){ return entries[x.k]; }).map(function(x){ return { k: x.k, l: x.l, b: x.b }; });
+    if (extras.length) data.extraRows = extras;
 
     var saveBtn = document.getElementById('saveShowBtn');
     saveBtn.disabled = true;
@@ -1286,7 +1383,7 @@ td.datacell.hit{background:var(--gold-tint)}
       var re = /(\d{2,3})\s*(?:-|–|—|to|thru|through)\s*(\d{2,3})/gi, m, pairs = [];
       while ((m = re.exec(text))){ var a = +m[1], b = +m[2]; if (b >= a && a >= 30 && b <= 400) pairs.push([a, b]); }
       if (!pairs.length){ msg.textContent = 'Couldn’t find any weight ranges like “95–118” in that photo. Try a straighter, closer shot.'; return; }
-      var rows = TEMPLATES[state.template].rows, n = 0;
+      var rows = formRows(), n = 0;
       rows.forEach(function(row, i){
         if (i >= pairs.length) return;
         var mn = document.getElementById('min_' + row.k), mx = document.getElementById('max_' + row.k);
@@ -1324,7 +1421,7 @@ td.datacell.hit{background:var(--gold-tint)}
   function buildModel(key){
     var tpl = TEMPLATES[key];
     var shows = (state.shows[key] || []).filter(function(s){ return s.series === state.series; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
-    var groups = groupByBreed(tpl.rows).map(function(g){
+    var groups = groupByBreed(rowsFor(key, shows)).map(function(g){
       return { breed: g.breed, rows: g.rows.map(function(r){
         var mins = [], maxs = [];
         var cells = shows.map(function(s){
@@ -1622,7 +1719,7 @@ td.datacell.hit{background:var(--gold-tint)}
         db.collection('shows').where('template','==',tplKey).onSnapshot(function(snap){
           state.shows[tplKey] = snap.docs.map(function(d){
             var data = d.data() || {};
-            return { id: d.id, name: data.name||'Untitled show', date: data.date||'', judge: data.judge||'', series: data.series||'naile', entries: data.entries||{} };
+            return { id: d.id, name: data.name||'Untitled show', date: data.date||'', judge: data.judge||'', series: data.series||'naile', entries: data.entries||{}, extraRows: Array.isArray(data.extraRows) ? data.extraRows : [] };
           });
           state.loaded[tplKey] = true;
           renderTable();
