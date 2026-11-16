@@ -4,7 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Weigh-Break Recorder</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%23000%27/%3E%3Crect x=%274%27 y=%2726%27 width=%2724%27 height=%273%27 fill=%27%23b8913a%27/%3E%3Ctext x=%2716%27 y=%2721%27 font-size=%2716%27 font-family=%27Arial%27 font-weight=%27bold%27 text-anchor=%27middle%27 fill=%27%23fff%27%3EW%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
+<link rel="manifest" href="./manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Weigh Breaks">
+<script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add('embed');
+if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(){})})}</script>
 </head>
 <body>
 
@@ -187,6 +195,34 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
 .lyheads{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 94px; gap:6px; font-size:.64rem; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); padding:2px 0;}
 .lyrow .iconbtn:disabled{opacity:.3}
 .lyrow .iconbtn.rm{color:#b33; border-color:#b33}
+.embed .topbar > div:first-child{display:none}
+.embed .wrap{padding-top:10px}
+.viewtoggle{display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden}
+.viewtoggle button{background:transparent; color:var(--on-dark-soft); border:0; padding:7px 12px; font:600 .75rem 'Oswald',sans-serif; letter-spacing:.04em; text-transform:uppercase}
+.viewtoggle button[aria-pressed="true"]{background:var(--gold-fill); color:#1f1d18}
+.lookup{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 10px}
+.lookup label{color:var(--on-dark-soft); font-size:.82rem}
+.lookup input{width:96px; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:var(--surface-2); color:var(--on-dark); font:600 1rem 'JetBrains Mono',monospace}
+.lookup .res{color:var(--gold-ink); font-size:.82rem; flex:1 1 220px}
+tr.fit td.rowlabel{background:var(--gold-tint); font-weight:700}
+tr.fit td.lblcell, tr.fit td.avgcell{box-shadow:inset 0 0 0 2px var(--gold-fill)}
+td.datacell.hit{background:var(--gold-tint)}
+.cards{display:flex; flex-direction:column; gap:14px}
+.cardgroup h3{margin:0 0 8px; font:600 .8rem 'Oswald',sans-serif; letter-spacing:.06em; text-transform:uppercase; color:var(--on-dark-soft); padding-left:8px}
+.cardgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px}
+.ccard{background:var(--surface-2); border:1px solid var(--line); border-radius:12px; padding:12px; color:var(--on-dark)}
+.ccard.fit{border-color:var(--gold-fill); box-shadow:0 0 0 1px var(--gold-fill)}
+.ccard .cname{font-weight:600; font-size:.9rem}
+.ccard .cavg{font:600 1.35rem 'JetBrains Mono',monospace; color:var(--gold-ink); margin:4px 0 0}
+.ccard .cn{font-size:.7rem; color:var(--on-dark-soft)}
+.ccard ul{list-style:none; margin:8px 0 0; padding:8px 0 0; border-top:1px solid var(--line); font-size:.74rem; color:var(--on-dark-soft)}
+.ccard li{display:flex; justify-content:space-between; gap:6px; padding:1px 0}
+.ccard li b{font:500 .74rem 'JetBrains Mono',monospace; color:var(--on-dark)}
+.ccard li.hit b{color:var(--gold-ink)}
+.classrow input.auto{color:var(--ink-soft); font-style:italic}
+.ocrbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:0 0 10px}
+.ocrbar .msg{font-size:.78rem; color:var(--ink-soft)}
+@media (max-width:600px){ .cardgrid{grid-template-columns:1fr 1fr} .ccard .cavg{font-size:1.15rem} .topbar p{display:none} .toolbar .btn{padding:7px 10px; font-size:.72rem} .toolbar{margin-top:10px} }
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
 
@@ -221,6 +257,13 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
       <button class="btn" id="addShowBtn">+ Add Show</button>
     </div>
   </div>
+  <div class="lookup">
+    <span class="viewtoggle" role="group" aria-label="View"><button id="viewCards" aria-pressed="false">Cards</button><button id="viewTable" aria-pressed="true">Table</button></span>
+    <label for="lookupW">My lamb weighs</label>
+    <input id="lookupW" type="number" inputmode="decimal" placeholder="lbs">
+    <span class="res" id="lookupRes"></span>
+  </div>
+  <div class="cards" id="cardView" hidden></div>
 
   <div class="tablecard">
     <div class="tablescroll">
@@ -259,6 +302,11 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
       </div>
       <div class="field" style="margin-top:4px;">
         <label style="margin-bottom:8px;">Class weigh breaks &mdash; leave blank for any class not held</label>
+        <div class="ocrbar">
+          <button class="btn subtle" id="ocrBtn" type="button">Read a photo of the break sheet</button>
+          <input id="ocrFile" type="file" accept="image/*" capture="environment" hidden>
+          <span class="msg" id="ocrMsg">Tip: type only each class's top weight. The next class's bottom fills itself in (+1).</span>
+        </div>
         <div id="classGroups"></div>
       </div>
     </div>
@@ -610,7 +658,98 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
   }
 
   // ---------- rendering: main table ----------
-  function renderTable(){
+  // ---------- mobile view, lookup, and the cache the GSC app reads ----------
+  var VIEW_KEY = 'wbr-view-v1', viewMode = null;
+  try { viewMode = localStorage.getItem(VIEW_KEY); } catch (e){}
+  if (viewMode !== 'cards' && viewMode !== 'table') viewMode = window.matchMedia('(max-width:700px)').matches ? 'cards' : 'table';
+  function setView(m){ viewMode = m; try { localStorage.setItem(VIEW_KEY, m); } catch (e){} renderTable(); }
+
+  function classStats(shows, r){
+    var mins = [], maxs = [], per = [];
+    shows.forEach(function(s){
+      var e = s.entries && s.entries[r.k];
+      if (e && typeof e.min === 'number' && typeof e.max === 'number'){ mins.push(e.min); maxs.push(e.max); per.push({ s: s, e: e }); }
+      else per.push({ s: s, e: null });
+    });
+    return { n: mins.length, min: mins.length ? Math.round(mean(mins)) : null, max: mins.length ? Math.round(mean(maxs)) : null, per: per };
+  }
+  function lookupW(){ var v = parseFloat(document.getElementById('lookupW').value); return isNaN(v) ? null : v; }
+
+  function renderExtras(){
+    var tpl = TEMPLATES[state.template];
+    var shows = (state.shows[state.template] || []).filter(function(s){ return s.series === state.series; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+    var w = lookupW(), fits = {}, summary = [];
+    if (state.loaded[state.template]) groupByBreed(tpl.rows).forEach(function(g){
+      var stats = g.rows.map(function(r){ return { r: r, st: classStats(shows, r) }; }).filter(function(x){ return x.st.n; });
+      if (w == null || !stats.length) return;
+      var hit = stats.filter(function(x){ return w >= x.st.min && w <= x.st.max; })[0];
+      if (!hit) hit = stats.filter(function(x){ return x.st.max >= w; }).sort(function(a,b){ return a.st.max - b.st.max; })[0];
+      if (hit){ fits[hit.r.k] = true; summary.push(hit.r.l + (hit.r.l.indexOf(g.breed) < 0 && g.breed !== hit.r.l ? ' (' + g.breed + ')' : '')); }
+    });
+    var res = document.getElementById('lookupRes');
+    res.textContent = w == null ? '' : summary.length ? 'Most likely: ' + summary.join(' · ') : 'Heavier than every recorded class here.';
+
+    var cardsOn = viewMode === 'cards';
+    document.getElementById('viewCards').setAttribute('aria-pressed', cardsOn ? 'true' : 'false');
+    document.getElementById('viewTable').setAttribute('aria-pressed', cardsOn ? 'false' : 'true');
+    var card = document.querySelector('.tablecard'), cv = document.getElementById('cardView');
+    var empty = state.loaded[state.template] && !shows.length;
+    card.hidden = cardsOn && !empty; cv.hidden = !cardsOn || empty;
+    document.getElementById('resetWidthsBtn').style.display = cardsOn ? 'none' : '';
+
+    // table highlights
+    document.querySelectorAll('#tableBody tr[data-k]').forEach(function(tr){
+      tr.classList.toggle('fit', !!fits[tr.dataset.k]);
+      tr.querySelectorAll('td.datacell').forEach(function(td){
+        var lo = parseFloat(td.dataset.min), hi = parseFloat(td.dataset.max);
+        td.classList.toggle('hit', w != null && !isNaN(lo) && w >= lo && w <= hi);
+      });
+    });
+
+    // cards
+    if (cardsOn && !empty){
+      cv.innerHTML = '';
+      groupByBreed(tpl.rows).forEach(function(g){
+        var sec = document.createElement('div'); sec.className = 'cardgroup';
+        sec.innerHTML = '<h3 style="border-left:3px solid ' + (BREED_COLORS[g.breed] || 'var(--line)') + '">' + escapeHtml(g.breed) + '</h3>';
+        var grid = document.createElement('div'); grid.className = 'cardgrid';
+        g.rows.forEach(function(r){
+          var st = classStats(shows, r), c = document.createElement('div');
+          c.className = 'ccard' + (fits[r.k] ? ' fit' : '');
+          var items = st.per.slice().reverse().map(function(p){
+            var on = p.e && w != null && w >= p.e.min && w <= p.e.max;
+            return '<li' + (on ? ' class="hit"' : '') + '><span>' + escapeHtml(showYearLabel(p.s)) + '</span><b>' + (p.e ? p.e.min + '–' + p.e.max : '—') + '</b></li>';
+          }).join('');
+          c.innerHTML = '<div class="cname">' + escapeHtml(r.l) + '</div>' +
+            '<div class="cavg">' + (st.n ? st.min + '–' + st.max : '—') + '</div>' +
+            '<div class="cn">' + (st.n ? 'avg of ' + st.n + ' show' + (st.n === 1 ? '' : 's') : 'no breaks yet') + '</div>' +
+            (shows.length ? '<ul>' + items + '</ul>' : '');
+          grid.appendChild(c);
+        });
+        sec.appendChild(grid); cv.appendChild(sec);
+      });
+    }
+    scheduleCache();
+  }
+
+  var cacheTimer = null;
+  function scheduleCache(){ clearTimeout(cacheTimer); cacheTimer = setTimeout(writeCache, 400); }
+  function writeCache(){
+    if (!dbAvailable) return;
+    if (!ALL_TEMPLATE_KEYS.every(function(k){ return state.loaded[k]; })) return;
+    var out = { v: 1, updated: Date.now(), series: {}, templates: {}, shows: [] };
+    SERIES_ORDER.forEach(function(id){ out.series[id] = { label: SERIES[id].label, templates: SERIES[id].templates.slice() }; });
+    ALL_TEMPLATE_KEYS.forEach(function(k){
+      out.templates[k] = { label: TEMPLATES[k].label, rows: TEMPLATES[k].rows.map(function(r){ return { k: r.k, l: r.l, b: r.b }; }) };
+      (state.shows[k] || []).forEach(function(s){ out.shows.push({ id: s.id, name: s.name, date: s.date, series: s.series, template: k, entries: s.entries }); });
+    });
+    try { localStorage.setItem('wb-cache-v1', JSON.stringify(out)); } catch (e){}
+    try { if (window.parent && window.parent !== window) window.parent.dispatchEvent(new Event('gsc-wb')); } catch (e){}
+  }
+
+  function renderTable(){ renderTableCore(); renderExtras(); }
+
+  function renderTableCore(){
     var tpl = TEMPLATES[state.template];
     var shows = (state.shows[state.template] || []).filter(function(s){ return s.series === state.series; }).sort(function(a,b){
       return (a.date||'').localeCompare(b.date||'');
@@ -722,6 +861,7 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
       appendBreedRow(tbody, g.breed, shows.length);
       g.rows.forEach(function(r){
         var tr = document.createElement('tr');
+        tr.dataset.k = r.k;
         var tdl = document.createElement('td');
         tdl.className = 'rowlabel';
         tdl.style.borderLeft = '3px solid ' + (BREED_COLORS[r.b] || 'var(--line)');
@@ -734,6 +874,7 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
           var td = document.createElement('td');
           td.className = 'datacell';
           if (e && typeof e.min === 'number' && typeof e.max === 'number'){
+            td.dataset.min = e.min; td.dataset.max = e.max;
             mins.push(e.min); maxs.push(e.max);
             td.innerHTML = '<span class="range mono">'+e.min+'&ndash;'+e.max+'</span>' +
               (e.note ? '<span class="note">'+escapeHtml(e.note)+'</span>' : '');
@@ -812,6 +953,15 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
         det.appendChild(row);
       });
       container.appendChild(det);
+      var gRows = g.rows;
+      gRows.forEach(function(r, i){
+        var next = gRows[i + 1]; if (!next) return;
+        var mx = det.querySelector('#max_' + r.k), nm = det.querySelector('#min_' + next.k);
+        if (!nm.value) nm.dataset.auto = '1';
+        function sync(){ if (nm.dataset.auto !== '1') return; var v = parseFloat(mx.value); nm.value = isNaN(v) ? '' : String(v + 1); nm.classList.toggle('auto', !!nm.value); }
+        mx.addEventListener('input', sync);
+        nm.addEventListener('input', function(){ nm.dataset.auto = nm.value ? '0' : '1'; nm.classList.remove('auto'); });
+      });
     });
   }
 
@@ -823,6 +973,7 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     document.getElementById('showJudge').value = show ? (show.judge||'') : '';
     document.getElementById('deleteShowBtn').hidden = !show;
     buildClassGroups(state.template, show ? show.entries : null);
+    document.getElementById('ocrMsg').textContent = 'Tip: type only each class\u2019s top weight. The next class\u2019s bottom fills itself in (+1).';
     document.getElementById('scrim').hidden = false;
     document.getElementById('showName').focus();
   }
@@ -1122,6 +1273,33 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     } finally { btn.disabled = false; }
   }
 
+  // ---------- read a photo of the posted break sheet ----------
+  var TESS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+  async function readBreakPhoto(file){
+    var msg = document.getElementById('ocrMsg'), btn = document.getElementById('ocrBtn');
+    btn.disabled = true; msg.textContent = 'Loading the reader…';
+    try {
+      await loadScript(TESS_URL);
+      msg.textContent = 'Reading the photo… (can take 10–20 seconds)';
+      var r = await Tesseract.recognize(file, 'eng');
+      var text = (r && r.data && r.data.text) || '';
+      var re = /(\d{2,3})\s*(?:-|–|—|to|thru|through)\s*(\d{2,3})/gi, m, pairs = [];
+      while ((m = re.exec(text))){ var a = +m[1], b = +m[2]; if (b >= a && a >= 30 && b <= 400) pairs.push([a, b]); }
+      if (!pairs.length){ msg.textContent = 'Couldn’t find any weight ranges like “95–118” in that photo. Try a straighter, closer shot.'; return; }
+      var rows = TEMPLATES[state.template].rows, n = 0;
+      rows.forEach(function(row, i){
+        if (i >= pairs.length) return;
+        var mn = document.getElementById('min_' + row.k), mx = document.getElementById('max_' + row.k);
+        if (!mn || !mx) return;
+        mn.value = pairs[i][0]; mx.value = pairs[i][1]; mn.dataset.auto = '0'; mn.classList.remove('auto'); n++;
+      });
+      document.querySelectorAll('#classGroups details').forEach(function(d){ d.open = true; });
+      msg.textContent = 'Filled ' + n + ' class' + (n === 1 ? '' : 'es') + ' in order from the photo' + (pairs.length > rows.length ? ' (' + (pairs.length - rows.length) + ' extra ranges ignored)' : '') + '. Check every line before saving.';
+    } catch (err){
+      msg.textContent = 'Couldn’t read the photo: ' + (err && err.message ? err.message : 'needs an internet connection');
+    } finally { btn.disabled = false; document.getElementById('ocrFile').value = ''; }
+  }
+
   // ---------- export (Excel / PDF) ----------
   var dl = null;
   var EXCELJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
@@ -1339,6 +1517,11 @@ table.custom td.rowlabel{text-overflow:ellipsis;}
     persistWidths();
     applyColWidths();
   });
+  document.getElementById('viewCards').addEventListener('click', function(){ setView('cards'); });
+  document.getElementById('viewTable').addEventListener('click', function(){ setView('table'); });
+  document.getElementById('lookupW').addEventListener('input', renderExtras);
+  document.getElementById('ocrBtn').addEventListener('click', function(){ document.getElementById('ocrFile').click(); });
+  document.getElementById('ocrFile').addEventListener('change', function(e){ var f = e.target.files && e.target.files[0]; if (f) readBreakPhoto(f); });
   document.getElementById('editClassesBtn').addEventListener('click', openLayoutModal);
   document.getElementById('closeLayout').addEventListener('click', closeLayoutModal);
   document.getElementById('cancelLayout').addEventListener('click', closeLayoutModal);
